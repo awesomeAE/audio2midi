@@ -2,13 +2,33 @@
 
 # Audio2MIDI
 
-**A self-hosted, open-source alternative to Mirelo Audio-to-MIDI.** No account, no credits, your audio never leaves your machine.
+**A free, local, open-source alternative to Mirelo Audio-to-MIDI.** No subscription, no transcription credits, your audio stays on your machine. A free Hugging Face account is required for the initial model download.
 
 Audio-to-MIDI plugin (VST3, AU, Standalone). Put it on an audio track, drop in a file or record the track, check the result in the piano roll and by ear, and drag the transcribed MIDI parts back into your DAW. Full mixes work: you get one MIDI file per instrument plus one with every part.
 
 Transcription runs locally with [MuScriptor](https://github.com/muscriptor/muscriptor) by Kyutai and Mirelo. This project is not affiliated with either.
 
 <p align="center"><img src="assets/preview.png" alt="Audio2MIDI plugin with a transcribed song in the piano roll" width="520"></p>
+
+## Audio2MIDI vs. Mirelo
+
+**Transcribe on your own computer, without paying per song or buying credits.**
+
+| | Audio2MIDI (this project) | Mirelo Audio-to-MIDI plugin |
+| --- | --- | --- |
+| Cost | **Free download and local transcription**; no subscription or credits | Free download; transcription uses account credits |
+| Usage allowance | **No credit balance or monthly quota**; limited by your hardware | 2.5 credits per audio second; free plan includes 5,000 credits/month (about 33 minutes) |
+| Processing | **Local**, on your computer | Cloud, on Mirelo's servers |
+| Audio upload | **No audio sent to a cloud service** | Audio uploaded for transcription |
+| Internet | Initial dependency and model downloads; transcription runs locally afterward | Required for transcription |
+| Account | No Audio2MIDI account; free Hugging Face account for model access | Mirelo account required |
+| Plugin source | **Open source**, AGPL-3.0 | Separate commercial product; Mirelo also co-released the open MuScriptor research model |
+| DAW workflow | File drop or recording; full mixes; per-instrument and combined MIDI export | File drop or recording; full mixes; per-instrument and combined MIDI export |
+| Transcription model | Open MuScriptor research model | Audio-to-MIDI Pro production model |
+
+Free does not mean unrestricted: MuScriptor's weights are **CC BY-NC 4.0 (non-commercial)**. You supply the hardware, disk space and electricity. This project does not claim the same transcription accuracy as Mirelo's production model. See [Requirements](#requirements) and [Limits](#limits) before installing, including the untested Windows support.
+
+Comparison checked November 9, 2026 against Mirelo's [plugin announcement and FAQ](https://mirelo.ai/blog/audio-to-midi-vst-plugin), [model overview](https://mirelo.ai/models/audio-to-midi), and the [MuScriptor model card and licence](https://huggingface.co/MuScriptor/muscriptor-medium). Mirelo's plans and rates may change.
 
 ## How it works
 

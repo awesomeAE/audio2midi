@@ -1,0 +1,19 @@
+{
+  "name": "audio2midi-site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "check": "astro sync && tsc --noEmit",
+    "preview": "astro preview",
+    "deploy": "astro build && wrangler deploy"
+  },
+  "dependencies": {
+    "@astrojs/sitemap": "^3.7.4",
+    "astro": "^7.4.7"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
+}

@@ -2,6 +2,8 @@
 
 # Audio2MIDI
 
+Website: [awesomeae.com](https://awesomeae.com)
+
 **A free, local, open-source alternative to Mirelo Audio-to-MIDI.** No subscription, no transcription credits, your audio stays on your machine. A free Hugging Face account is required for the initial model download.
 
 Audio-to-MIDI plugin (VST3, AU, Standalone). Put it on an audio track, drop in a file or record the track, check the result in the piano roll and by ear, and drag the transcribed MIDI parts back into your DAW. Full mixes work: you get one MIDI file per instrument plus one with every part.

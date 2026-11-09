@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/logo.png" alt="awesomeAE Audio-to-MIDI" width="280"></p>
+
 # Audio2MIDI
 
 **A self-hosted, open-source alternative to Mirelo Audio-to-MIDI.** No account, no credits, your audio never leaves your machine.
@@ -5,6 +7,8 @@
 Audio-to-MIDI plugin (VST3, AU, Standalone). Put it on an audio track, drop in a file or record the track, check the result in the piano roll and by ear, and drag the transcribed MIDI parts back into your DAW. Full mixes work: you get one MIDI file per instrument plus one with every part.
 
 Transcription runs locally with [MuScriptor](https://github.com/muscriptor/muscriptor) by Kyutai and Mirelo. This project is not affiliated with either.
+
+<p align="center"><img src="assets/preview.png" alt="Audio2MIDI plugin with a transcribed song in the piano roll" width="520"></p>
 
 ## How it works
 

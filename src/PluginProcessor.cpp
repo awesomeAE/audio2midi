@@ -99,6 +99,11 @@ void Audio2MidiProcessor::renderPreview (juce::AudioBuffer<float>& buffer)
     const auto samples = buffer.getNumSamples();
     const auto seek = seekTarget.exchange (-1.0);
     const auto start = seek >= 0.0 ? seek : previewSeconds.load();
+
+    if (seek >= 0.0)
+        nextEvent = (int) (std::lower_bound (playingSequence.begin(), playingSequence.end(), start,
+                                             [] (const auto* event, double time) { return event->message.getTimeStamp() < time; })
+                           - playingSequence.begin());
     const auto end = start + samples / sampleRate;
     const auto playMidi = synth != nullptr && playingSequence.getNumEvents() > 0;
 
@@ -113,14 +118,14 @@ void Audio2MidiProcessor::renderPreview (juce::AudioBuffer<float>& buffer)
         }
 
         // Programs and controllers sent before the start point still apply.
-        for (const auto* event : playingSequence)
-            if (event->message.getTimeStamp() < start && ! event->message.isNoteOnOrOff())
-                synthMidi.addEvent (event->message, 0);
+        for (int i = 0; i < nextEvent; ++i)
+            if (const auto& message = playingSequence.getEventPointer (i)->message; ! message.isNoteOnOrOff())
+                synthMidi.addEvent (message, 0);
     }
 
-    for (int i = playingSequence.getNextIndexAtTime (start); i < playingSequence.getNumEvents(); ++i)
+    for (; nextEvent < playingSequence.getNumEvents(); ++nextEvent)
     {
-        const auto& message = playingSequence.getEventPointer (i)->message;
+        const auto& message = playingSequence.getEventPointer (nextEvent)->message;
 
         if (message.getTimeStamp() >= end)
             break;
@@ -193,6 +198,7 @@ void Audio2MidiProcessor::setStateInformation (const void* data, int sizeInBytes
     if (state == nullptr || ! state->hasTagName ("Audio2MIDI"))
         return;
 
+    cancelTranscription();
     juce::StringArray restored;
 
     // Ignore names a different engine version may not know.
@@ -238,10 +244,12 @@ void Audio2MidiProcessor::setSource (const juce::File& file)
 
     transport.setSource (nullptr);
     sourceReader.reset();
+    sourceSeconds = 0.0;
 
     if (auto* reader = formats.createReaderFor (file))
     {
         const auto rate = reader->sampleRate;
+        sourceSeconds = rate > 0 ? (double) reader->lengthInSamples / rate : 0.0;
         sourceReader = std::make_unique<juce::AudioFormatReaderSource> (reader, true);
         ioThread.startThread();
         transport.setSource (sourceReader.get(), 1 << 15, &ioThread, rate, 2);
@@ -378,11 +386,13 @@ void Audio2MidiProcessor::setPreviewMidi (const juce::File& file)
     {
         midi.convertTimestampTicksToSeconds();
 
-        // Meta events stay out: sent to a synth, their 0xff status byte would mean "reset".
         for (int track = 0; track < midi.getNumTracks(); ++track)
-            for (const auto* event : *midi.getTrack (track))
-                if (! event->message.isMetaEvent())
-                    loaded.addEvent (event->message);
+            loaded.addSequence (*midi.getTrack (track), 0.0);
+
+        // Meta events stay out: sent to a synth, their 0xff status byte would mean "reset".
+        for (int i = loaded.getNumEvents(); --i >= 0;)
+            if (loaded.getEventPointer (i)->message.isMetaEvent())
+                loaded.deleteEvent (i, false);
 
         loaded.updateMatchedPairs();
     }
@@ -434,20 +444,21 @@ void Audio2MidiProcessor::startPreview()
         return;
 
     seekPreview (previewSeconds >= previewLength ? 0.0 : previewSeconds.load());
-    transport.start();
     previewPlaying = true;
 }
 
 void Audio2MidiProcessor::stopPreview()
 {
+    // The transport keeps "playing": its stop() waits for an audio callback that, with the
+    // preview off, never comes. Output is gated by previewPlaying alone.
     previewPlaying = false;
-    transport.stop();
 }
 
 void Audio2MidiProcessor::seekPreview (double seconds)
 {
     const auto target = juce::jlimit (0.0, juce::jmax (0.0, previewLength.load()), seconds);
     transport.setPosition (target);
+    transport.start(); // restarts it after it ran off the end of the file
     previewSeconds = target;
     seekTarget = target;
 }
@@ -459,7 +470,7 @@ bool Audio2MidiProcessor::isPreviewWaitingForHost() const
 
 void Audio2MidiProcessor::updatePreviewLength()
 {
-    previewLength = juce::jmax (transport.getLengthInSeconds(), sequence.getEndTime());
+    previewLength = juce::jmax (sourceSeconds, sequence.getEndTime());
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new Audio2MidiProcessor(); }

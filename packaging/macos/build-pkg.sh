@@ -35,8 +35,8 @@ cat > "$work/distribution.xml" <<XML
         <pkg-ref id="org.audio2midi.plugin.vst3"/>
         <pkg-ref id="org.audio2midi.plugin.au"/>
     </choice>
-    <pkg-ref id="org.audio2midi.plugin.vst3" version="$version">vst3.pkg</pkg-ref>
-    <pkg-ref id="org.audio2midi.plugin.au" version="$version">au.pkg</pkg-ref>
+    <pkg-ref id="org.audio2midi.plugin.vst3" version="$version" auth="none">vst3.pkg</pkg-ref>
+    <pkg-ref id="org.audio2midi.plugin.au" version="$version" auth="none">au.pkg</pkg-ref>
 </installer-gui-script>
 XML
 

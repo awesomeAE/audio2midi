@@ -336,11 +336,16 @@ void Audio2MidiEditor::timerCallback()
     revealButton.setEnabled (! status.parts.empty());
 
     playButton.setButtonText (previewing ? "Stop" : "Play");
-    playButton.setEnabled (previewing || (! recording && length > 0.0));
+    playButton.setEnabled (previewing || (! recording && length > 0.0 && (audioProcessor.canPreviewMidi() || audioProcessor.getSource().existsAsFile())));
     positionLabel.setText (length > 0.0 ? formatDuration (audioProcessor.getPreviewPosition()) + " / " + formatDuration (length) : juce::String(),
                            juce::dontSendNotification);
     mixSlider.setEnabled (audioProcessor.canPreviewMidi() && ! status.parts.empty() && audioProcessor.getSource().existsAsFile());
     alignButton.setEnabled (! status.alignedParts.empty());
+    // The host can restore a state while the editor is open.
+    alignButton.setToggleState (audioProcessor.alignToBeats, juce::dontSendNotification);
+
+    if (! mixSlider.isMouseButtonDown())
+        mixSlider.setValue (audioProcessor.previewMix, juce::dontSendNotification);
     alignButton.setTooltip (status.alignedParts.empty() && status.alignError.isNotEmpty() ? status.alignError
                                                                                         : "Moves every note onto the detected beat grid.");
 

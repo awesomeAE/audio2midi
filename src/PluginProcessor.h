@@ -91,12 +91,14 @@ private:
 
     juce::AudioFormatManager formats;
     std::unique_ptr<juce::AudioFormatReaderSource> sourceReader;
+    double sourceSeconds = 0.0;
     juce::AudioTransportSource transport;
     juce::MidiMessageSequence sequence;
     juce::SpinLock previewLock; // the audio thread only ever try-locks it
     std::unique_ptr<juce::AudioPluginInstance> synth; // assigned under previewLock
     juce::MidiMessageSequence playingSequence;        // guarded by previewLock
     bool hasSourceAudio = false;                      // guarded by previewLock
+    int nextEvent = 0;                                // audio thread: index into playingSequence
     juce::AudioBuffer<float> sourceBuffer, synthBuffer;
     juce::MidiBuffer synthMidi;
     std::atomic<bool> previewPlaying { false };

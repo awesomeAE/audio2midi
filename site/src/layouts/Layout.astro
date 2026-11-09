@@ -5,15 +5,17 @@ import "../styles/global.css";
 interface Props {
   title: string;
   description: string;
+  lang?: string;
+  ogLocale?: string;
 }
 
-const { title, description } = Astro.props;
+const { title, description, lang = "en", ogLocale = "en_US" } = Astro.props;
 const canonical = new URL(Astro.url.pathname, Astro.site);
 const ogImage = new URL("/plugin.png", Astro.site);
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang={lang}>
   <head>
     <meta charset="utf-8" />
     <script is:inline>document.documentElement.classList.add("js")</script>
@@ -26,6 +28,7 @@ const ogImage = new URL("/plugin.png", Astro.site);
     <link rel="sitemap" href="/sitemap-index.xml" />
     <meta name="theme-color" content="#f7f7fb" />
     <meta property="og:type" content="website" />
+    <meta property="og:locale" content={ogLocale} />
     <meta property="og:site_name" content="awesomeAE" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />

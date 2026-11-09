@@ -6,14 +6,24 @@ const colors: Record<string, string> = {
   "Electric bass": "#22d3ee",
   Drums: "#f472b6",
 };
-const labels: Record<string, string> = {
-  "Distorted electric guitar": "Guitar",
-  "Electric bass": "Bass",
-};
 const ALL = "All parts";
+type TextKey = "all" | "guitar" | "bass" | "drums" | "hear" | "stop" | "percentOfFree" | "timesFree" | "minutes" | "hours";
+// The page's strings in its language, from #text-data (built by Home.astro).
+let text: Record<TextKey, string>;
 const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 export function initPage() {
+  text = JSON.parse(document.getElementById("text-data")?.textContent ?? "{}");
+  const lang = document.getElementById("lang") as HTMLDetailsElement | null;
+  document.addEventListener("click", (e) => {
+    if (lang?.open && !lang.contains(e.target as Node)) lang.open = false;
+  });
+  lang?.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || !lang.open) return;
+    lang.open = false;
+    lang.querySelector("summary")?.focus();
+  });
+
   const nav = document.getElementById("nav");
   const onScroll = () => nav?.classList.toggle("scrolled", scrollY > 8);
   addEventListener("scroll", onScroll, { passive: true });
@@ -43,18 +53,22 @@ function initMeter() {
   const bar = document.getElementById("cloud-bar");
   const sub = document.getElementById("cloud-sub");
   if (!input || !out || !credits || !bar || !sub) return;
-  const fmt = new Intl.NumberFormat("en-US");
+  const locale = document.documentElement.lang;
+  const fmt = new Intl.NumberFormat(locale);
+  const fmt1 = new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const fmtHours = new Intl.NumberFormat(locale, { maximumFractionDigits: 1 });
   const FREE = 5000;
   const update = () => {
     const minutes = Number(input.value);
     const used = minutes * 60 * 2.5;
-    out.textContent = minutes >= 60 ? `${(minutes / 60).toFixed(minutes % 60 ? 1 : 0)} h` : `${minutes} min`;
+    out.textContent =
+      minutes >= 60 ? text.hours.replace("{n}", fmtHours.format(minutes / 60)) : text.minutes.replace("{n}", String(minutes));
     credits.textContent = fmt.format(used);
     bar.style.width = `${Math.min(100, (used / (1200 * 150)) * 100)}%`;
     sub.textContent =
       used <= FREE
-        ? `${Math.round((used / FREE) * 100)}% of the free plan's 5,000 monthly credits`
-        : `${(used / FREE).toFixed(1)}× the free plan's 5,000 monthly credits`;
+        ? text.percentOfFree.replace("{n}", String(Math.round((used / FREE) * 100)))
+        : text.timesFree.replace("{n}", fmt1.format(used / FREE));
   };
   input.addEventListener("input", update);
   update();
@@ -68,6 +82,12 @@ function initStudio(parts: Parts) {
   if (!roll || !wave || !list || !play) return;
 
   const names = Object.keys(parts);
+  const labels: Record<string, string> = {
+    [ALL]: text.all,
+    "Distorted electric guitar": text.guitar,
+    "Electric bass": text.bass,
+    Drums: text.drums,
+  };
   const all = names.flatMap((n) => parts[n].map((note) => ({ part: n, note })));
   const duration = Math.ceil(Math.max(...all.map(({ note }) => note[0] + note[1])));
   const pitches = all.map(({ note }) => note[2]);
@@ -283,7 +303,7 @@ function initStudio(parts: Parts) {
         clearInterval(timer);
         cut();
         play.dataset.on = "false";
-        label.textContent = "Hear it";
+        label.textContent = text.hear;
         if (reduced) running = false;
         await ctx?.suspend();
         return;
@@ -302,7 +322,7 @@ function initStudio(parts: Parts) {
       restartBus();
       timer = window.setInterval(schedule, 60);
       play.dataset.on = "true";
-      label.textContent = "Stop";
+      label.textContent = text.stop;
       loop();
     } finally {
       busy = false;

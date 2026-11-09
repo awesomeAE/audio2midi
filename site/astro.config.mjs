@@ -4,7 +4,11 @@ import sitemap from "@astrojs/sitemap";
 export default defineConfig({
   site: "https://awesomeae.com",
   output: "static",
-  integrations: [sitemap()],
+  integrations: [
+    sitemap({
+      i18n: { defaultLocale: "en", locales: { en: "en", de: "de", es: "es", fr: "fr" } },
+    }),
+  ],
   fonts: [
     {
       name: "Inter Tight",

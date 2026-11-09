@@ -1,0 +1,1340 @@
+---
+import Layout from "../layouts/Layout.astro";
+import notes from "../data/notes.json";
+import { dictionaries, homePath, langs, type Lang } from "../i18n";
+
+interface Props {
+  lang: Lang;
+}
+
+const { lang } = Astro.props;
+const t = dictionaries[lang];
+const home = homePath(lang);
+const repo = "https://github.com/awesomeAE/audio2midi";
+const download = `${repo}/releases/latest/download/Audio2MIDI-macOS.pkg`;
+const github = (
+  '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.42-2.7 5.39-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg>'
+);
+const arrow = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 4v13m0 0-5-5m5 5 5-5M5 20h14"/></svg>';
+const url = new URL(home, Astro.site).href;
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "Audio2MIDI",
+  applicationCategory: "MultimediaApplication",
+  operatingSystem: "macOS 11+",
+  description: t.jsonLdDescription,
+  inLanguage: t.htmlLang,
+  offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+  downloadUrl: download,
+  license: "https://www.gnu.org/licenses/agpl-3.0.html",
+  url,
+};
+// Strings page.ts needs at runtime.
+const { percentOfFree, timesFree, minutes, hours } = t.local;
+const clientText = { ...t.studio.labels, hear: t.studio.hear, stop: t.studio.stop, percentOfFree, timesFree, minutes, hours };
+---
+
+<Layout lang={lang} title={t.title} description={t.description} ogLocale={t.ogLocale}>
+  <script slot="head" type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
+  {langs.map((l) => <link slot="head" rel="alternate" hreflang={l} href={new URL(homePath(l), Astro.site).href} />)}
+  <link slot="head" rel="alternate" hreflang="x-default" href={new URL("/", Astro.site).href} />
+  <header class="nav" id="nav">
+    <div class="wrap nav-inner">
+      <a class="brand" href={home} aria-label={t.nav.home}>
+        <img src="/logo.png" alt="" width="34" height="34" />
+        <span>awesome<b>AE</b></span>
+      </a>
+      <nav aria-label={t.nav.main}>
+        <a href="#how">{t.nav.how}</a>
+        <a href="#local">{t.nav.local}</a>
+        <a href="#compare">{t.nav.compare}</a>
+        <a href="#faq">{t.nav.faq}</a>
+      </nav>
+      <div class="nav-cta">
+        <details class="lang" id="lang">
+          <summary aria-label={`${lang.toUpperCase()}, ${t.nav.language}`}>{lang.toUpperCase()}</summary>
+          <ul>
+            {langs.map((l) => (
+              <li>
+                <a href={homePath(l)} hreflang={l} lang={l} aria-current={l === lang ? "page" : undefined}>
+                  {dictionaries[l].languageName}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </details>
+        <a class="icon-link" href={repo} aria-label={t.nav.github}><Fragment set:html={github} /></a>
+        <a class="btn small" href={download}>{t.nav.download}</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="hero-glow" aria-hidden="true"></div>
+      <div class="wrap hero-copy">
+        <span class="pill reveal"><span class="dot"></span>{t.hero.pill}</span>
+        <h1 class="reveal" set:html={t.hero.titleHtml} />
+        <p class="lead reveal">{t.hero.lead}</p>
+        <div class="cta reveal">
+          <a class="btn" href={download}><Fragment set:html={arrow} />{t.hero.download}</a>
+          <a class="btn ghost" href={repo}><Fragment set:html={github} />{t.hero.source}</a>
+        </div>
+        <p class="fine reveal">{t.hero.fine}</p>
+      </div>
+      <div class="wrap">
+        <div class="studio reveal" id="studio">
+          <div class="studio-bar">
+            <span class="lights" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span class="studio-title">Audio2MIDI</span>
+            <span class="engine"><span class="dot"></span><span class="mono">engine · 127.0.0.1:8722</span></span>
+          </div>
+          <div class="studio-body">
+            <div class="roll-wrap">
+              <canvas id="wave" height="56" aria-hidden="true"></canvas>
+              <canvas id="roll" height="300" tabindex="0" role="img" aria-label={t.studio.rollLabel}></canvas>
+            </div>
+            <aside class="parts">
+              <div class="parts-head">
+                <span>{t.studio.parts}</span>
+                <button class="play" id="play" type="button" data-on="false">
+                  <svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 4.5v15l13-7.5z"/></svg>
+                  <svg class="i-stop" viewBox="0 0 24 24" aria-hidden="true"><rect fill="currentColor" x="6" y="6" width="12" height="12" rx="2"/></svg>
+                  <span class="play-label">{t.studio.hear}</span>
+                </button>
+              </div>
+              <ul id="part-list" role="list"></ul>
+              <p class="parts-note">{t.studio.note}</p>
+            </aside>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="strip" aria-label={t.strip.label}>
+      <div class="wrap strip-grid">
+        {t.strip.items.map(([value, label]) => <div class="reveal"><b>{value}</b><span>{label}</span></div>)}
+      </div>
+    </section>
+
+    <section class="section" id="how">
+      <div class="wrap">
+        <span class="eyebrow reveal">{t.how.eyebrow}</span>
+        <h2 class="reveal" set:html={t.how.titleHtml} />
+        <div class="steps">
+          {t.how.steps.map((s, i) => (
+            <article class="step reveal">
+              <span class="step-n mono">{String(i + 1).padStart(2, "0")}</span>
+              <h3>{s.title}</h3>
+              <p>{s.text}</p>
+            </article>
+          ))}
+        </div>
+        <figure class="shot reveal">
+          <img src="/plugin.png" alt={t.how.shotAlt} width="642" height="616" loading="lazy" />
+          <figcaption>
+            <h3>{t.how.shotTitle}</h3>
+            <p>{t.how.shotText}</p>
+          </figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section dark" id="local">
+      <div class="wrap">
+        <span class="eyebrow reveal">{t.local.eyebrow}</span>
+        <h2 class="reveal" set:html={t.local.titleHtml} />
+        <p class="lead reveal">{t.local.lead}</p>
+
+        <div class="meter reveal" id="meter">
+          <label for="minutes">
+            <span>{t.local.meterLabel}</span>
+            <output id="minutes-out" class="mono">{t.local.minutes.replace("{n}", "120")}</output>
+          </label>
+          <input id="minutes" type="range" min="5" max="1200" step="5" value="120" />
+          <div class="meter-cols">
+            <div class="meter-card">
+              <span class="meter-k">{t.local.cloud}</span>
+              <b id="cloud-credits">{new Intl.NumberFormat(t.htmlLang).format(18000)}</b>
+              <span class="meter-unit">{t.local.creditsPerMonth}</span>
+              <div class="bar"><i id="cloud-bar"></i></div>
+              <span class="meter-sub" id="cloud-sub">{t.local.timesFree.replace("{n}", new Intl.NumberFormat(t.htmlLang, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(3.6))}</span>
+            </div>
+            <div class="meter-card ours">
+              <span class="meter-k">Audio2MIDI</span>
+              <b>0</b>
+              <span class="meter-unit">{t.local.creditsEver}</span>
+              <div class="bar"><i style="width:0"></i></div>
+              <span class="meter-sub">{t.local.ours}</span>
+            </div>
+          </div>
+          <p class="meter-src" set:html={t.local.meterSrcHtml} />
+        </div>
+
+        <div class="local-grid">
+          {t.local.cards.map((c) => (
+            <article class="reveal">
+              <h3>{c.title}</h3>
+              <p>{c.text}</p>
+            </article>
+          ))}
+        </div>
+
+        <div class="flow reveal" aria-label={t.local.flowLabel}>
+          <div class="flow-box"><span class="mono">01</span>{t.local.flowDaw}</div>
+          <div class="flow-line"><span class="mono">audio</span></div>
+          <div class="flow-box">{t.local.flowPlugin}<small>JUCE · C++</small></div>
+          <div class="flow-line"><span class="mono">http</span></div>
+          <div class="flow-box accent">{t.local.flowEngine}<small class="mono">127.0.0.1:8722</small></div>
+          <div class="flow-machine mono">{t.local.flowMachine}</div>
+        </div>
+
+        <div class="models">
+          {t.local.models.map((m, i) => (
+            <article class:list={["reveal", { active: i === 1 }]}><span class="mono">{m.tag}</span><h3>{m.title}</h3><p>{m.text}</p></article>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="features">
+      <div class="wrap">
+        <span class="eyebrow reveal">{t.features.eyebrow}</span>
+        <h2 class="reveal" set:html={t.features.titleHtml} />
+        <div class="features">
+          {t.features.items.map((f, i) => (
+            <article class={`feature reveal f${i}`}>
+              <span class="tag mono">{f.tag}</span>
+              <h3>{f.title}</h3>
+              <p>{f.text}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section class="section compare-sec" id="compare">
+      <div class="wrap">
+        <span class="eyebrow reveal">{t.compare.eyebrow}</span>
+        <h2 class="reveal">{t.compare.title}</h2>
+        <p class="lead reveal">{t.compare.lead}</p>
+        <div class="table-wrap reveal">
+          <table>
+            <thead>
+              <tr><th scope="col"><span class="sr">{t.compare.aspect}</span></th><th scope="col" class="us">Audio2MIDI</th><th scope="col">{t.compare.mirelo}</th></tr>
+            </thead>
+            <tbody>
+              {t.compare.rows.map(([k, a, b]) => (
+                <tr><th scope="row">{k}</th><td class="us">{a}</td><td>{b}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p class="src reveal" set:html={t.compare.srcHtml} />
+      </div>
+    </section>
+
+    <section class="section" id="install">
+      <div class="wrap install">
+        <div>
+          <span class="eyebrow reveal">{t.install.eyebrow}</span>
+          <h2 class="reveal" set:html={t.install.titleHtml} />
+          <ol class="install-steps">
+            {t.install.stepsHtml.map((step) => <li class="reveal" set:html={step} />)}
+          </ol>
+        </div>
+        <aside class="req reveal">
+          <h3>{t.install.requirements}</h3>
+          <ul>
+            {t.install.req.map(([k, v]) => <li><span>{k}</span>{v}</li>)}
+          </ul>
+          <a class="btn" href={download}><Fragment set:html={arrow} />{t.install.download}</a>
+          <a class="req-link" href={`${repo}/releases/latest`}>{t.install.releases}</a>
+        </aside>
+      </div>
+    </section>
+
+    <section class="section faq-sec" id="faq">
+      <div class="wrap faq">
+        <div>
+          <span class="eyebrow reveal">{t.faq.eyebrow}</span>
+          <h2 class="reveal" set:html={t.faq.titleHtml} />
+        </div>
+        <div class="faq-list">
+          {t.faq.items.map((f) => (
+            <details class="reveal">
+              <summary>{f.q}</summary>
+              <p>{f.a}</p>
+            </details>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section class="final">
+      <div class="wrap final-inner reveal">
+        <h2 set:html={t.final.titleHtml} />
+        <p>{t.final.text}</p>
+        <div class="cta">
+          <a class="btn light" href={download}><Fragment set:html={arrow} />{t.final.download}</a>
+          <a class="btn ghost-dark" href={repo}><Fragment set:html={github} />{t.final.star}</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <div class="wrap foot-inner">
+      <a class="brand" href={home}><img src="/logo.png" alt="" width="28" height="28" /><span>awesome<b>AE</b></span></a>
+      <p set:html={t.footer.textHtml} />
+      <nav aria-label={t.footer.label}>
+        <a href={repo}>GitHub</a>
+        <a href={`${repo}/releases`}>{t.footer.releases}</a>
+        <a href={`${repo}/issues`}>{t.footer.issues}</a>
+      </nav>
+    </div>
+  </footer>
+
+  <script type="application/json" id="notes-data" set:html={JSON.stringify(notes)} />
+  <script type="application/json" id="text-data" set:html={JSON.stringify(clientText)} />
+</Layout>
+
+<script>
+  import { initPage } from "../scripts/page";
+  initPage();
+</script>
+
+<style>
+  .nav {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    transition: background 0.3s ease, box-shadow 0.3s ease;
+  }
+  .nav.scrolled {
+    background: rgb(247 247 251 / 0.82);
+    backdrop-filter: saturate(1.6) blur(14px);
+    -webkit-backdrop-filter: saturate(1.6) blur(14px);
+    box-shadow: 0 1px 0 var(--line);
+  }
+  .nav-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 72px;
+  }
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+    font: 600 1.2rem var(--font-display);
+    letter-spacing: -0.03em;
+  }
+  .brand img {
+    border-radius: 9px;
+  }
+  .brand b {
+    background: var(--grad);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .nav nav {
+    display: flex;
+    gap: 34px;
+  }
+  .nav nav a,
+  .foot nav a {
+    text-decoration: none;
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: #2b2d45;
+  }
+  .nav nav a:hover {
+    color: var(--blue);
+  }
+  .nav-cta {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .icon-link {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+  }
+  .icon-link:hover {
+    background: #eceef7;
+  }
+  .lang {
+    position: relative;
+  }
+  .lang summary {
+    display: grid;
+    place-items: center;
+    height: 40px;
+    padding: 0 12px;
+    border-radius: 20px;
+    cursor: pointer;
+    list-style: none;
+    font: 600 0.85rem var(--font-mono);
+    color: #2b2d45;
+  }
+  .lang summary::-webkit-details-marker {
+    display: none;
+  }
+  .lang summary:hover,
+  .lang[open] summary {
+    background: #eceef7;
+  }
+  .lang ul {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 8px);
+    margin: 0;
+    padding: 6px;
+    list-style: none;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: 0 12px 32px rgb(11 12 26 / 0.12);
+    min-width: 150px;
+  }
+  .lang a {
+    display: block;
+    padding: 8px 12px;
+    border-radius: 9px;
+    text-decoration: none;
+    font-size: 0.92rem;
+  }
+  .lang a:hover {
+    background: #eceef7;
+  }
+  .lang a[aria-current="page"] {
+    font-weight: 600;
+    color: var(--blue);
+  }
+  .icon-link :global(svg) {
+    width: 22px;
+    height: 22px;
+  }
+  .btn.small {
+    min-height: 40px;
+    padding: 0 20px;
+    font-size: 0.92rem;
+  }
+
+  .hero {
+    position: relative;
+    padding-top: clamp(40px, 7vw, 90px);
+    padding-bottom: 40px;
+    isolation: isolate;
+  }
+  .hero-glow {
+    position: absolute;
+    inset: -120px 0 auto;
+    height: 760px;
+    z-index: -1;
+    background:
+      radial-gradient(40% 50% at 22% 30%, rgb(34 195 238 / 0.2), transparent 70%),
+      radial-gradient(38% 46% at 80% 22%, rgb(168 85 247 / 0.18), transparent 70%),
+      radial-gradient(50% 40% at 50% 70%, rgb(91 124 255 / 0.12), transparent 70%);
+    pointer-events: none;
+  }
+  .hero-copy {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 26px;
+  }
+  .hero .lead {
+    max-width: 700px;
+  }
+  .cta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: center;
+  }
+  .fine {
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+
+  .studio {
+    margin-top: clamp(48px, 7vw, 80px);
+    border-radius: 26px;
+    background: var(--night);
+    color: #e8e9ff;
+    box-shadow:
+      0 0 0 1px rgb(255 255 255 / 0.06) inset,
+      0 50px 120px -40px rgb(40 40 120 / 0.55),
+      0 30px 60px -30px rgb(10 10 40 / 0.5);
+    overflow: hidden;
+  }
+  .studio-bar {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--night-line);
+    font-size: 0.85rem;
+  }
+  .lights {
+    display: flex;
+    gap: 7px;
+  }
+  .lights i {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: #2b2e55;
+  }
+  .studio-title {
+    font-weight: 600;
+  }
+  .engine {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--night-muted);
+  }
+  .engine .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #34d399;
+    box-shadow: 0 0 10px #34d399;
+  }
+  .studio-body {
+    display: grid;
+    grid-template-columns: 1fr 280px;
+  }
+  .roll-wrap {
+    padding: 18px;
+    display: grid;
+    gap: 12px;
+    min-width: 0;
+  }
+  .roll-wrap canvas {
+    width: 100%;
+    border-radius: 12px;
+  }
+  #roll {
+    height: 300px;
+    background: var(--night-2);
+  }
+  #wave {
+    height: 56px;
+  }
+  .parts {
+    border-left: 1px solid var(--night-line);
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .parts-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-weight: 600;
+    font-size: 0.9rem;
+  }
+  .play {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 36px;
+    padding: 0 14px;
+    border-radius: 999px;
+    border: 0;
+    background: var(--grad);
+    color: #fff;
+    font: 600 0.85rem var(--font-body);
+    cursor: pointer;
+  }
+  .play svg {
+    width: 14px;
+    height: 14px;
+  }
+  .play .i-stop,
+  .play[data-on="true"] .i-play {
+    display: none;
+  }
+  .play[data-on="true"] .i-stop {
+    display: block;
+  }
+  .parts ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 6px;
+  }
+  .parts :global(button.part) {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 11px 12px;
+    border: 1px solid transparent;
+    border-radius: 12px;
+    background: transparent;
+    color: #d7d9f5;
+    font: 500 0.9rem var(--font-body);
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.2s ease;
+  }
+  .parts :global(button.part:hover) {
+    background: rgb(255 255 255 / 0.05);
+  }
+  .parts :global(button.part[aria-pressed="true"]) {
+    background: rgb(91 124 255 / 0.16);
+    border-color: rgb(91 124 255 / 0.4);
+    color: #fff;
+  }
+  .parts :global(.swatch) {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    flex: none;
+  }
+  .parts :global(.count) {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--night-muted);
+  }
+  .parts-note {
+    margin-top: auto;
+    font-size: 0.75rem;
+    color: var(--night-muted);
+  }
+
+  .strip {
+    padding-block: 40px 0;
+  }
+  .strip-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    border-block: 1px solid var(--line);
+  }
+  .strip-grid div {
+    padding: 34px 20px;
+    display: grid;
+    gap: 4px;
+    text-align: center;
+  }
+  .strip-grid div + div {
+    border-left: 1px solid var(--line);
+  }
+  .strip-grid b {
+    font: 600 clamp(2rem, 4vw, 3rem) var(--font-display);
+    letter-spacing: -0.04em;
+  }
+  .strip-grid span {
+    color: var(--muted);
+    font-size: 0.95rem;
+  }
+
+  .steps {
+    margin-top: 64px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+  }
+  .step {
+    padding: 30px;
+    border-radius: var(--radius);
+    background: var(--card);
+    border: 1px solid var(--line);
+    display: grid;
+    gap: 12px;
+    align-content: start;
+  }
+  .step-n {
+    font-size: 0.8rem;
+    color: var(--blue);
+  }
+  .step p,
+  .feature p,
+  .shot p {
+    color: var(--muted);
+  }
+  .shot {
+    margin: 18px 0 0;
+    padding: clamp(24px, 4vw, 56px);
+    border-radius: 28px;
+    background: linear-gradient(140deg, #e8f8fe, #eef0ff 50%, #f5ecff);
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    gap: clamp(28px, 5vw, 64px);
+    align-items: center;
+  }
+  .shot img {
+    width: 100%;
+    height: auto;
+    border-radius: 16px;
+    box-shadow: 0 40px 80px -30px rgb(20 20 70 / 0.45);
+  }
+  .shot figcaption {
+    display: grid;
+    gap: 14px;
+  }
+  .shot h3 {
+    font-size: clamp(1.6rem, 3vw, 2.3rem);
+    letter-spacing: -0.035em;
+  }
+
+  .dark {
+    background: var(--night);
+    color: #eef0ff;
+    position: relative;
+    overflow: hidden;
+  }
+  .dark::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(50% 40% at 85% 0%, rgb(168 85 247 / 0.22), transparent 70%),
+      radial-gradient(45% 40% at 0% 30%, rgb(34 195 238 / 0.16), transparent 70%);
+    pointer-events: none;
+  }
+  .dark .wrap {
+    position: relative;
+  }
+  .dark .eyebrow {
+    color: var(--cyan);
+  }
+  .dark .lead {
+    color: var(--night-muted);
+    margin-top: 24px;
+  }
+  .meter {
+    margin-top: 56px;
+    padding: clamp(22px, 4vw, 40px);
+    border-radius: 26px;
+    background: rgb(255 255 255 / 0.04);
+    border: 1px solid var(--night-line);
+  }
+  .meter label {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    font-weight: 500;
+  }
+  .meter output {
+    color: var(--cyan);
+    font-size: 1rem;
+  }
+  .meter input[type="range"] {
+    width: 100%;
+    margin: 18px 0 30px;
+    accent-color: var(--blue);
+    height: 28px;
+  }
+  .meter-cols {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .meter-card {
+    padding: 26px;
+    border-radius: 18px;
+    background: var(--night-2);
+    border: 1px solid var(--night-line);
+    display: grid;
+    gap: 6px;
+  }
+  .meter-card.ours {
+    background: linear-gradient(160deg, rgb(34 195 238 / 0.14), rgb(168 85 247 / 0.14));
+    border-color: rgb(91 124 255 / 0.5);
+  }
+  .meter-k {
+    font-size: 0.85rem;
+    color: var(--night-muted);
+  }
+  .meter-card b {
+    font: 600 clamp(2.6rem, 6vw, 4.4rem) var(--font-display);
+    letter-spacing: -0.045em;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .meter-card.ours b {
+    background: var(--grad);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .meter-unit {
+    color: var(--night-muted);
+  }
+  .bar {
+    height: 8px;
+    margin-top: 14px;
+    border-radius: 99px;
+    background: rgb(255 255 255 / 0.08);
+    overflow: hidden;
+  }
+  .bar i {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #f59e0b, #ef4444);
+    transition: width 0.25s ease;
+  }
+  .meter-sub {
+    margin-top: 6px;
+    font-size: 0.88rem;
+    color: #c9cbea;
+  }
+  .meter-src {
+    margin-top: 20px;
+    font-size: 0.8rem;
+    color: var(--night-muted);
+  }
+  .local-grid {
+    margin-top: 18px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+  }
+  .local-grid article,
+  .models article {
+    padding: 26px;
+    border-radius: 20px;
+    background: rgb(255 255 255 / 0.03);
+    border: 1px solid var(--night-line);
+    display: grid;
+    gap: 10px;
+    align-content: start;
+  }
+  .local-grid p,
+  .models p {
+    color: var(--night-muted);
+    font-size: 0.95rem;
+  }
+  .flow {
+    margin-top: 18px;
+    padding: 34px clamp(18px, 3vw, 34px) 46px;
+    border-radius: 22px;
+    border: 1px dashed #3b3f78;
+    display: flex;
+    align-items: center;
+    position: relative;
+  }
+  .flow-box {
+    flex: 1;
+    padding: 18px;
+    border-radius: 14px;
+    background: var(--night-2);
+    border: 1px solid var(--night-line);
+    text-align: center;
+    font-weight: 600;
+    display: grid;
+    gap: 4px;
+  }
+  .flow-box span {
+    display: none;
+  }
+  .flow-box small {
+    font-weight: 400;
+    color: var(--night-muted);
+    font-size: 0.8rem;
+  }
+  .flow-box.accent {
+    border-color: rgb(91 124 255 / 0.7);
+    box-shadow: 0 0 40px -10px rgb(91 124 255 / 0.7);
+  }
+  .flow-line {
+    flex: 0 0 clamp(40px, 8vw, 110px);
+    height: 2px;
+    background: linear-gradient(90deg, var(--cyan), var(--violet));
+    position: relative;
+  }
+  .flow-line span {
+    position: absolute;
+    left: 50%;
+    top: -22px;
+    transform: translateX(-50%);
+    font-size: 0.72rem;
+    color: var(--night-muted);
+  }
+  .flow-line::after {
+    content: "";
+    position: absolute;
+    top: -3px;
+    left: 0;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 12px var(--cyan);
+    animation: packet 2.4s linear infinite;
+  }
+  .flow-machine {
+    position: absolute;
+    bottom: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--cyan);
+    white-space: nowrap;
+  }
+  @keyframes packet {
+    from { left: 0; }
+    to { left: calc(100% - 8px); }
+  }
+  .models {
+    margin-top: 18px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+  .models span {
+    font-size: 0.75rem;
+    color: var(--cyan);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  .models .active {
+    border-color: rgb(91 124 255 / 0.6);
+    background: rgb(91 124 255 / 0.1);
+  }
+
+  .features {
+    margin-top: 64px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+  }
+  .feature {
+    min-height: 260px;
+    padding: 30px;
+    border-radius: var(--radius);
+    background: var(--card);
+    border: 1px solid var(--line);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+  }
+  .feature:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 30px 60px -30px rgb(40 40 120 / 0.3);
+  }
+  .feature h3 {
+    margin-top: auto;
+  }
+  .tag {
+    align-self: flex-start;
+    padding: 5px 11px;
+    border-radius: 99px;
+    background: #eef0ff;
+    color: #3b4bd0;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .feature::after {
+    content: "";
+    position: absolute;
+    right: -40px;
+    top: -40px;
+    width: 160px;
+    height: 160px;
+    border-radius: 50%;
+    background: var(--grad);
+    opacity: 0.08;
+    filter: blur(6px);
+  }
+  .f0,
+  .f3 {
+    background: linear-gradient(160deg, #ffffff 40%, #ecf9fe);
+  }
+  .f1,
+  .f4 {
+    background: linear-gradient(160deg, #ffffff 40%, #eff1ff);
+  }
+  .f2,
+  .f5 {
+    background: linear-gradient(160deg, #ffffff 40%, #f6efff);
+  }
+
+  .compare-sec {
+    padding-top: 0;
+  }
+  .compare-sec .lead {
+    margin-top: 22px;
+  }
+  .table-wrap {
+    margin-top: 48px;
+    border-radius: var(--radius);
+    border: 1px solid var(--line);
+    background: var(--card);
+    overflow-x: auto;
+  }
+  table {
+    width: 100%;
+    min-width: 640px;
+    border-collapse: collapse;
+    font-size: 0.95rem;
+  }
+  th,
+  td {
+    padding: 18px 22px;
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid var(--line);
+  }
+  tbody tr:last-child > * {
+    border-bottom: 0;
+  }
+  thead th {
+    font: 600 1rem var(--font-display);
+    letter-spacing: -0.01em;
+  }
+  tbody th {
+    width: 20%;
+    font-weight: 600;
+    color: #2b2d45;
+  }
+  td {
+    color: var(--muted);
+  }
+  .us {
+    background: linear-gradient(180deg, rgb(91 124 255 / 0.06), rgb(91 124 255 / 0.06));
+    color: var(--ink);
+    font-weight: 500;
+  }
+  thead .us {
+    color: var(--blue);
+  }
+  .sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .src {
+    margin-top: 18px;
+    font-size: 0.85rem;
+    color: var(--muted);
+    max-width: 900px;
+  }
+
+  .install {
+    display: grid;
+    grid-template-columns: 1.3fr 1fr;
+    gap: clamp(32px, 6vw, 80px);
+    align-items: start;
+  }
+  .install-steps {
+    margin: 48px 0 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: s;
+    display: grid;
+    gap: 26px;
+  }
+  .install-steps li {
+    counter-increment: s;
+    padding-left: 58px;
+    position: relative;
+    color: var(--muted);
+  }
+  .install-steps li::before {
+    content: counter(s);
+    position: absolute;
+    left: 0;
+    top: -4px;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: var(--ink);
+    color: #fff;
+    font: 600 0.95rem var(--font-display);
+  }
+  /* Markup from the dictionaries' *Html strings carries no scope attribute, hence :global. */
+  .install-steps :global(b) {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .install-steps :global(a),
+  .src :global(a),
+  .meter-src :global(a),
+  .foot :global(a),
+  .req-link {
+    text-decoration-color: rgb(91 124 255 / 0.5);
+    text-underline-offset: 3px;
+  }
+  .install-steps :global(.cmd) {
+    display: block;
+    margin-top: 10px;
+    padding: 12px 16px;
+    border-radius: 12px;
+    background: var(--night);
+    color: #c8f3ff;
+    width: fit-content;
+    max-width: 100%;
+  }
+  .install-steps :global(.cmd::before) {
+    content: "$ ";
+    color: var(--night-muted);
+  }
+  .req {
+    position: sticky;
+    top: 100px;
+    padding: 32px;
+    border-radius: var(--radius);
+    background: var(--card);
+    border: 1px solid var(--line);
+    display: grid;
+    gap: 18px;
+    box-shadow: 0 30px 60px -40px rgb(40 40 120 / 0.35);
+  }
+  .req ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .req li {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--line);
+    display: grid;
+    gap: 2px;
+    font-size: 0.95rem;
+  }
+  .req li span {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .req-link {
+    font-size: 0.88rem;
+    color: var(--muted);
+    text-align: center;
+  }
+
+  .faq-sec {
+    padding-top: 0;
+  }
+  .faq {
+    display: grid;
+    grid-template-columns: 1fr 1.6fr;
+    gap: clamp(32px, 6vw, 80px);
+  }
+  .faq-list {
+    border-top: 1px solid var(--line);
+  }
+  .faq-list details {
+    border-bottom: 1px solid var(--line);
+  }
+  .faq-list summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 24px 44px 24px 0;
+    position: relative;
+    font: 500 1.15rem var(--font-display);
+    letter-spacing: -0.015em;
+  }
+  .faq-list summary::-webkit-details-marker {
+    display: none;
+  }
+  .faq-list summary::after {
+    content: "";
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    width: 12px;
+    height: 12px;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: translateY(-70%) rotate(45deg);
+    transition: transform 0.25s ease;
+  }
+  .faq-list details[open] summary::after {
+    transform: translateY(-30%) rotate(-135deg);
+  }
+  .faq-list details p {
+    padding-bottom: 24px;
+    color: var(--muted);
+    max-width: 680px;
+  }
+
+  .final {
+    padding: 0 0 clamp(60px, 8vw, 100px);
+  }
+  .final-inner {
+    padding: clamp(56px, 9vw, 120px) clamp(24px, 5vw, 64px);
+    border-radius: 32px;
+    background:
+      radial-gradient(60% 80% at 0% 0%, rgb(34 195 238 / 0.35), transparent 60%),
+      radial-gradient(60% 80% at 100% 100%, rgb(168 85 247 / 0.4), transparent 60%),
+      var(--night);
+    color: #fff;
+    text-align: center;
+    display: grid;
+    gap: 22px;
+    justify-items: center;
+  }
+  .final p {
+    color: #c9cbea;
+    font-size: 1.15rem;
+  }
+
+  .foot {
+    border-top: 1px solid var(--line);
+    padding: 40px 0 56px;
+  }
+  .foot-inner {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 32px;
+    align-items: start;
+  }
+  .foot p {
+    font-size: 0.85rem;
+    color: var(--muted);
+    max-width: 620px;
+  }
+  .foot nav {
+    display: flex;
+    gap: 22px;
+  }
+
+  @media (max-width: 960px) {
+    .nav nav {
+      display: none;
+    }
+    .studio-body {
+      grid-template-columns: 1fr;
+    }
+    .parts {
+      border-left: 0;
+      border-top: 1px solid var(--night-line);
+    }
+    .parts ul {
+      grid-template-columns: 1fr 1fr;
+    }
+    .steps,
+    .features,
+    .models {
+      grid-template-columns: 1fr 1fr;
+    }
+    .local-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+    .shot,
+    .install,
+    .faq {
+      grid-template-columns: 1fr;
+    }
+    .req {
+      position: static;
+    }
+    .foot-inner {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 640px) {
+    body {
+      font-size: 16px;
+    }
+    .nav-inner {
+      height: 64px;
+    }
+    .nav-cta .icon-link {
+      display: none;
+    }
+    .nav-cta {
+      gap: 6px;
+    }
+    .studio-bar .engine .mono {
+      font-size: 0.7rem;
+    }
+    .studio-title {
+      display: none;
+    }
+    .roll-wrap,
+    .parts {
+      padding: 12px;
+    }
+    .strip-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+    .strip-grid div:nth-child(3) {
+      border-left: 0;
+    }
+    .strip-grid div:nth-child(n + 3) {
+      border-top: 1px solid var(--line);
+    }
+    .steps,
+    .features,
+    .models,
+    .local-grid,
+    .meter-cols {
+      grid-template-columns: 1fr;
+    }
+    .feature {
+      min-height: 0;
+    }
+    .feature h3 {
+      margin-top: 20px;
+    }
+    .flow {
+      flex-direction: column;
+      padding-bottom: 54px;
+    }
+    .flow-box {
+      width: 100%;
+    }
+    .flow-line {
+      flex-basis: 44px;
+      width: 2px;
+      height: auto;
+      background: linear-gradient(180deg, var(--cyan), var(--violet));
+    }
+    .flow-line span {
+      top: 50%;
+      left: 14px;
+      transform: translateY(-50%);
+    }
+    .flow-line::after {
+      left: -3px;
+      animation-name: packet-v;
+    }
+    .cta .btn {
+      width: 100%;
+    }
+  }
+  @keyframes packet-v {
+    from { top: 0; }
+    to { top: calc(100% - 8px); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .flow-line::after {
+      animation: none;
+    }
+  }
+</style>

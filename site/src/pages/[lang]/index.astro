@@ -1,0 +1,14 @@
+---
+import type { InferGetStaticPropsType } from "astro";
+import Home from "../../components/Home.astro";
+import { langs } from "../../i18n";
+
+export function getStaticPaths() {
+  return langs.filter((lang) => lang !== "en").map((lang) => ({ params: { lang }, props: { lang } }));
+}
+
+type Props = InferGetStaticPropsType<typeof getStaticPaths>;
+const { lang } = Astro.props;
+---
+
+<Home lang={lang} />

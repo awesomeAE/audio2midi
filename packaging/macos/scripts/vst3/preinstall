@@ -1,0 +1,5 @@
+#!/bin/sh
+# Remove the previous version first: a package only overlays its payload, so files a
+# new build no longer ships would otherwise stay inside the bundle. $2 is the install folder.
+rm -rf "$2/Audio2MIDI.vst3"
+exit 0

@@ -1,0 +1,5 @@
+#!/bin/sh
+# The Audio Unit registry otherwise picks up a new bundle only at the next login.
+# launchd restarts it on the next lookup.
+killall -9 AudioComponentRegistrar 2>/dev/null
+exit 0

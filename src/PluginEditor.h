@@ -62,6 +62,8 @@ private:
     juce::TextButton chooseButton { "Choose file" }, recordButton { "Record" },
                      instrumentsButton, transcribeButton { "Transcribe" }, revealButton { "Show files" },
                      playButton { "Play" };
+    juce::ComboBox modelBox;
+    int shownModel = -1; // the processor's model as modelBox last showed it
     juce::ToggleButton alignButton { "Align to beats" };
     juce::Slider mixSlider { juce::Slider::LinearHorizontal, juce::Slider::NoTextBox };
     juce::Label positionLabel;

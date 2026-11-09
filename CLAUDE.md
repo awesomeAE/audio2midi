@@ -12,7 +12,7 @@ Audio2MIDI: JUCE-9-Plugin (VST3, AU, Standalone; C++20, CMake) für Audio-zu-MID
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release   # JUCE 9.0.5 wird per FetchContent geholt
 cmake --build build                                        # kopiert VST3/AU nach ~/Library/Audio/Plug-Ins (nur macOS)
 ctest --test-dir build                                     # Unit-Tests (Target Audio2MidiTests)
-build/Audio2MidiTests_artefacts/Release/Audio2MidiTests --e2e song.mp3 [drums electric_bass]   # echter Engine-Lauf, startet/stoppt die Engine selbst
+build/Audio2MidiTests_artefacts/Release/Audio2MidiTests --e2e song.mp3 [--model small] [drums electric_bass]   # echter Engine-Lauf, startet/stoppt die Engine selbst
 pluginval --strictness-level 10 --validate ~/Library/Audio/Plug-Ins/VST3/Audio2MIDI.vst3
 auval -strict -v aufx A2md A2Mo
 ```
@@ -28,7 +28,8 @@ Drei Schichten, alles in `src/`:
   - Start: `uvx --from muscriptor==<engineVersion>` löst die Python-3.12-Umgebung auf, danach wird das ermittelte Python direkt mit `-I -X utf8 -m muscriptor serve --host 127.0.0.1 --port 8722` gestartet. Absichtlich nicht über den `uvx`-Wrapper, weil ein Kill des Wrappers den Server verwaist zurückließe.
   - `TranscriptionJob` (eigener `juce::Thread`) lädt die Audiodatei per `POST /transcribe` hoch und liest den Server-Sent-Event-Stream (`handleStreamLine` → `StreamState`). Das Ergebnis ist eine Type-1-MIDI-Datei; `splitParts` zerlegt sie in „All parts“ plus eine Datei pro Instrument, jeweils mit Tempo-/Taktspur, damit sie im DAW-Raster landen. Danach schickt der Job die gestreamten Noten plus `beat_grid` einmal an `POST /export` (`quantize: true`) und hält so eine zweite, auf Beats ausgerichtete Version (`alignedParts`). `finishedStatus` schreibt beide Versionen als Dateien, für Job und State-Restore gleich.
   - Der Server läuft über `python -c <Watcher>`: ein Thread beendet ihn, sobald sich `getppid()` ändert (Host abgestürzt). Unter Windows greift das nicht.
-  - `engineVersion` und `instrumentNames()` sind an `muscriptor==0.4.0` gekoppelt. Bei einem Versions-Bump beides gemeinsam prüfen.
+  - Das Modell (`small`/`medium`/`large`, Default `medium`) wird beim Serverstart per `--model` gewählt. Wechselt ein Job das Modell, startet `ensureRunning` einen selbst gestarteten Server neu, aber nur wenn kein Job ihn hält (`users`, freigegeben per `release()`). Fremde Server werden mit ihrem Modell weiterverwendet.
+  - `engineVersion`, `instrumentNames()` und `modelNames()` sind an `muscriptor==0.4.0` gekoppelt. Bei einem Versions-Bump alles gemeinsam prüfen.
 - **`PluginProcessor.{h,cpp}`**: `processBlock` reicht Audio durch und schreibt beim Aufnehmen eine Kopie über `ThreadedWriter` (nur während der Host-Transport läuft; der Audio-Thread nimmt nur `try-lock` auf `recorderLock`). Aufnahmen sind 16-Bit-WAV, weil die Engine WAV über Pythons `wave`-Modul liest. Während des Vorhörens ersetzt `renderPreview` den Ausgang: Quell-Audio über `AudioTransportSource` plus MIDI über Apples eingebauten DLS-Synth (AU-Hosting, `JUCE_PLUGINHOST_AU=1`, nur macOS), Übergabe an den Audio-Thread per `try-lock` auf `previewLock` und `seekTarget`. Der State enthält Instrumente, Quelle, Mix, Ausrichtung und das Ergebnis (beide MIDI-Versionen base64), damit ein Projekt beim Öffnen sein Ergebnis zurückbekommt. Das Member `job` steht absichtlich zuletzt, damit es zuerst zerstört und gejoint wird.
 - **`PluginEditor.{h,cpp}`**: UI per Timer-Polling von `getStatus()`. Datei-Drop rein, MIDI-Parts raus: `getDragSourceDescription` startet direkt `performExternalDragDropOfFiles`. `PianoRoll` zeichnet `getPreviewSequence()` (Zeitstempel in Sekunden).
 

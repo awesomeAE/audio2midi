@@ -80,6 +80,12 @@ const juce::StringArray& instrumentNames()
     return names;
 }
 
+const juce::StringArray& modelNames()
+{
+    static const juce::StringArray names { "small", "medium", "large" };
+    return names;
+}
+
 std::vector<PartData> splitParts (const juce::MemoryBlock& midi)
 {
     juce::MemoryInputStream in (midi, false);
@@ -257,7 +263,7 @@ bool Engine::isServing()
     return list != nullptr && list->contains ("acoustic_piano");
 }
 
-juce::Result Engine::ensureRunning (juce::Thread& caller, const std::function<void (const juce::String&)>& report)
+juce::Result Engine::ensureRunning (juce::Thread& caller, const juce::String& model, const std::function<void (const juce::String&)>& report)
 {
     // Instances that start at the same time queue here instead of each launching a server.
     while (! launchLock.tryEnter())
@@ -270,14 +276,27 @@ juce::Result Engine::ensureRunning (juce::Thread& caller, const std::function<vo
 
     const juce::ScopeGuard unlock { [this] { launchLock.exit(); } };
 
-    if (isServing())
+    // shortcut: a server another process started doesn't report its model, so it is used as is;
+    // ask it over HTTP if MuScriptor ever exposes the loaded model.
+    if (isServing() && (server == nullptr || serverModel == model))
+    {
+        ++users;
         return juce::Result::ok();
+    }
+
+    if (server != nullptr && server->isRunning() && serverModel != model)
+    {
+        if (users > 0)
+            return fail ("The engine is busy with a transcription on the " + serverModel + " model. Try again when it has finished.");
+
+        stop();
+    }
 
     if (server == nullptr || ! server->isRunning())
     {
         stop();
 
-        if (const auto launched = launch (caller, report); launched.failed())
+        if (const auto launched = launch (caller, model, report); launched.failed())
             return launched;
     }
 
@@ -299,10 +318,11 @@ juce::Result Engine::ensureRunning (juce::Thread& caller, const std::function<vo
         caller.wait (500);
     }
 
+    ++users;
     return juce::Result::ok();
 }
 
-juce::Result Engine::launch (juce::Thread& caller, const std::function<void (const juce::String&)>& report)
+juce::Result Engine::launch (juce::Thread& caller, const juce::String& model, const std::function<void (const juce::String&)>& report)
 {
     const auto uvx = findUvx();
 
@@ -360,11 +380,13 @@ juce::Result Engine::launch (juce::Thread& caller, const std::function<void (con
                               "main()\n";
 
     if (! server->start (juce::StringArray { python.getFullPathName(), "-I", "-X", "utf8", "-c", watchedServe, "serve",
-                                             "--host", "127.0.0.1", "--port", juce::String (enginePort) }))
+                                             "--host", "127.0.0.1", "--port", juce::String (enginePort), "--model", model }))
     {
         server.reset();
         return fail ("Could not start " + python.getFullPathName());
     }
+
+    serverModel = model;
 
     {
         const juce::ScopedLock sl (outputLock);
@@ -403,12 +425,13 @@ void Engine::stop()
 }
 
 //==============================================================================
-TranscriptionJob::TranscriptionJob (Engine& e, juce::File audioFile, juce::StringArray instrumentsToUse, juce::String id,
+TranscriptionJob::TranscriptionJob (Engine& e, juce::File audioFile, juce::StringArray instrumentsToUse, juce::String modelToUse, juce::String id,
                                     juce::File outputDirectory, std::function<void (const Status&)> callback)
     : juce::Thread ("Audio2MIDI transcription"),
       engine (e),
       audio (std::move (audioFile)),
       instruments (std::move (instrumentsToUse)),
+      model (std::move (modelToUse)),
       clientId (std::move (id)),
       outputDir (std::move (outputDirectory)),
       onUpdate (std::move (callback))
@@ -433,16 +456,23 @@ void TranscriptionJob::run()
 {
     publish (Status::Stage::startingEngine, "Starting the transcription engine.", -1.0);
 
-    const auto ready = engine.ensureRunning (*this, [this] (const juce::String& message)
+    const auto ready = engine.ensureRunning (*this, model, [this] (const juce::String& message)
     {
         publish (Status::Stage::startingEngine, message, -1.0);
     });
 
+    if (ready.failed())
+    {
+        if (! threadShouldExit())
+            publish (Status::Stage::failed, ready.getErrorMessage(), 0.0);
+
+        return;
+    }
+
+    const juce::ScopeGuard released { [this] { engine.release(); } };
+
     if (threadShouldExit())
         return;
-
-    if (ready.failed())
-        return publish (Status::Stage::failed, ready.getErrorMessage(), 0.0);
 
     publish (Status::Stage::transcribing, "Transcribing", 0.0);
     StreamState state;

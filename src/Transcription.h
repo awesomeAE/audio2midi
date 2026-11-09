@@ -6,12 +6,16 @@
 
 namespace a2m
 {
-// Pinned: the HTTP contract and instrumentNames() below match this MuScriptor release.
+// Pinned: the HTTP contract, instrumentNames() and modelNames() below match this MuScriptor release.
 inline constexpr auto engineVersion = "0.4.0";
 inline constexpr int enginePort = 8722;
 
 /** The instrument groups MuScriptor can be told to transcribe. */
 const juce::StringArray& instrumentNames();
+
+/** The model sizes `muscriptor serve --model` accepts. Each one has its own gated weights. */
+const juce::StringArray& modelNames();
+inline constexpr auto defaultModel = "medium";
 
 struct Part
 {
@@ -87,20 +91,24 @@ public:
     Engine() = default;
     ~Engine();
 
-    /** Returns once the server answers, launching it through uv first if needed.
+    /** Returns once the server answers with `model` loaded, launching it through uv first if needed.
+        On success the caller holds the server until release(), so no other model replaces it meanwhile.
         Blocks, so call it from `caller`'s thread; gives up when that thread is asked to exit. */
-    juce::Result ensureRunning (juce::Thread& caller, const std::function<void (const juce::String&)>& report);
+    juce::Result ensureRunning (juce::Thread& caller, const juce::String& model, const std::function<void (const juce::String&)>& report);
+    void release() { --users; }
 
     static juce::URL url (const juce::String& path);
 
 private:
     static bool isServing();
-    juce::Result launch (juce::Thread& caller, const std::function<void (const juce::String&)>& report);
+    juce::Result launch (juce::Thread& caller, const juce::String& model, const std::function<void (const juce::String&)>& report);
     juce::String recentOutput() const;
     void stop();
 
     juce::CriticalSection launchLock;
     std::unique_ptr<juce::ChildProcess> server;
+    juce::String serverModel; // what `server` was started with; guarded by launchLock
+    std::atomic<int> users { 0 }; // jobs between ensureRunning() and release()
     std::thread outputReader; // drains the server's output so a full pipe never blocks it
 
     mutable juce::CriticalSection outputLock;
@@ -114,7 +122,7 @@ private:
 class TranscriptionJob final : public juce::Thread
 {
 public:
-    TranscriptionJob (Engine&, juce::File audio, juce::StringArray instruments, juce::String clientId,
+    TranscriptionJob (Engine&, juce::File audio, juce::StringArray instruments, juce::String model, juce::String clientId,
                       juce::File outputDir, std::function<void (const Status&)> onUpdate);
     ~TranscriptionJob() override;
 
@@ -129,6 +137,7 @@ private:
     Engine& engine;
     const juce::File audio;
     const juce::StringArray instruments;
+    const juce::String model;
     const juce::String clientId;
     const juce::File outputDir;
     const std::function<void (const Status&)> onUpdate;

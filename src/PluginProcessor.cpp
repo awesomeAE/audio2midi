@@ -171,6 +171,7 @@ void Audio2MidiProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
     juce::XmlElement state ("Audio2MIDI");
     state.setAttribute ("instruments", instruments.joinIntoString (","));
+    state.setAttribute ("model", a2m::modelNames()[model]);
     state.setAttribute ("align", alignToBeats.load());
     state.setAttribute ("mix", previewMix.load());
 
@@ -207,6 +208,8 @@ void Audio2MidiProcessor::setStateInformation (const void* data, int sizeInBytes
             restored.add (name);
 
     instruments = restored;
+    const auto restoredModel = a2m::modelNames().indexOf (state->getStringAttribute ("model", a2m::defaultModel));
+    model = restoredModel >= 0 ? restoredModel : a2m::modelNames().indexOf (a2m::defaultModel);
     alignToBeats = state->getBoolAttribute ("align");
     previewMix = juce::jlimit (0.0f, 1.0f, (float) state->getDoubleAttribute ("mix", 0.5));
 
@@ -355,7 +358,7 @@ void Audio2MidiProcessor::transcribe()
         resultName = source.getFileNameWithoutExtension();
     }
 
-    job = std::make_unique<a2m::TranscriptionJob> (*engine, source, instruments, clientId,
+    job = std::make_unique<a2m::TranscriptionJob> (*engine, source, instruments, a2m::modelNames()[model], clientId,
                                                    workDir.getChildFile (juce::Uuid().toString()),
                                                    [this] (const a2m::Status& update)
                                                    {

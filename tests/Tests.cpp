@@ -1,5 +1,5 @@
 // Unit tests:          Audio2MidiTests
-// Real engine run:     Audio2MidiTests --e2e <audio file> [instrument ...]
+// Real engine run:     Audio2MidiTests --e2e <audio file> [--model small|medium|large] [instrument ...]
 #include "Transcription.h"
 
 #include <iostream>
@@ -161,7 +161,7 @@ struct StreamTest final : juce::UnitTest
 SplitPartsTest splitPartsTest;
 StreamTest streamTest;
 
-int runEndToEnd (const juce::File& audio, const juce::StringArray& instruments)
+int runEndToEnd (const juce::File& audio, const juce::StringArray& instruments, const juce::String& model)
 {
     juce::SharedResourcePointer<a2m::Engine> engine;
     const auto outputDir = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("Audio2MidiE2E-" + juce::Uuid().toString());
@@ -172,7 +172,7 @@ int runEndToEnd (const juce::File& audio, const juce::StringArray& instruments)
     const auto started = juce::Time::getMillisecondCounterHiRes();
 
     {
-        a2m::TranscriptionJob job (*engine, audio, instruments, "e2e", outputDir, [&] (const a2m::Status& status)
+        a2m::TranscriptionJob job (*engine, audio, instruments, model, "e2e", outputDir, [&] (const a2m::Status& status)
         {
             const juce::ScopedLock sl (lock);
 
@@ -251,11 +251,15 @@ int main (int argc, char* argv[])
     if (argc >= 3 && juce::String (argv[1]) == "--e2e")
     {
         juce::StringArray instruments;
+        juce::String model = a2m::defaultModel;
 
         for (int i = 3; i < argc; ++i)
-            instruments.add (argv[i]);
+            if (juce::String (argv[i]) == "--model" && i + 1 < argc)
+                model = argv[++i];
+            else
+                instruments.add (argv[i]);
 
-        return runEndToEnd (juce::File::getCurrentWorkingDirectory().getChildFile (argv[2]), instruments);
+        return runEndToEnd (juce::File::getCurrentWorkingDirectory().getChildFile (argv[2]), instruments, model);
     }
 
     juce::UnitTestRunner runner;

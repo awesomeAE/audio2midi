@@ -36,16 +36,16 @@ Comparison checked November 9, 2026 against Mirelo's [plugin announcement and FA
 DAW ── Audio2MIDI plugin (JUCE, C++) ──HTTP──▶ MuScriptor engine (Python, PyTorch) on 127.0.0.1:8722
 ```
 
-The model is a PyTorch transformer, so the plugin does not embed it. It starts the engine itself on the first transcription (`uv` installs a pinned `muscriptor==0.4.0` in an isolated Python 3.12 environment) and stops it when the last plugin instance closes. The engine also exits on its own if the DAW crashes. An engine that is already running on port 8722 is reused.
+The model is a PyTorch transformer, so the plugin does not embed it. It starts the engine itself on the first transcription (`uv` installs a pinned `muscriptor==0.4.0` in an isolated Python 3.12 environment) and stops it when the last plugin instance closes. The engine also exits on its own if the DAW crashes. An engine that is already running on port 8722 is reused. Switching the model size restarts an engine the plugin started, once no transcription is running; an engine started by another program keeps the model it has.
 
 ## Requirements
 
 - macOS 11+ (Apple Silicon or Intel) or Windows 10+ x64
 - [uv](https://docs.astral.sh/uv/getting-started/installation/)
 - A free Hugging Face account. The model weights are gated under CC BY-NC 4.0:
-  1. Accept the licence at [MuScriptor/muscriptor-medium](https://huggingface.co/MuScriptor/muscriptor-medium).
+  1. Accept the licence at [MuScriptor/muscriptor-medium](https://huggingface.co/MuScriptor/muscriptor-medium), and at [muscriptor-small](https://huggingface.co/MuScriptor/muscriptor-small) or [muscriptor-large](https://huggingface.co/MuScriptor/muscriptor-large) to use those sizes.
   2. Run `uvx hf auth login` once.
-- About 2 GB of disk space for PyTorch and the weights, which download on the first run
+- About 2 GB of disk space for PyTorch and the medium weights, which download on the first run. The small model adds about 0.4 GB, the large one about 5.5 GB.
 
 ## Install (macOS)
 
@@ -70,6 +70,7 @@ JUCE 9.0.5 is fetched by CMake. The VST3 and AU are copied to `~/Library/Audio/P
 1. Insert **Audio2MIDI** on an audio track.
 2. Drop an audio file (wav, aiff, flac, mp3, ogg) on the plugin, use **Choose file**, or press **Record** and play the track.
 3. Optional: limit **Instruments** to the parts you expect. The default detects them automatically.
+   Pick the **model** size: **Medium** is the default, **Small** is faster, **Large** is more accurate but slower and needs more memory. Each size downloads its weights on first use.
 4. Press **Transcribe**. The first run takes a few minutes while the engine and weights download.
 5. Select a part and press **Play** to hear it. The preview plays through the track: the slider mixes the original audio with the MIDI, played by macOS's built-in General MIDI sounds. Click the piano roll to jump. Some DAWs, such as Logic Pro, only run a track's plugins while the transport plays; the plugin tells you when that is the case.
 6. Turn on **Align to beats** to snap every note to the detected beat grid. Leave it off to keep the performance as played.
@@ -81,7 +82,7 @@ The MIDI files carry the detected tempo and meter, so they land on the grid. The
 
 ```bash
 ctest --test-dir build                                    # unit tests
-build/Audio2MidiTests_artefacts/Release/Audio2MidiTests --e2e song.mp3 [drums electric_bass]
+build/Audio2MidiTests_artefacts/Release/Audio2MidiTests --e2e song.mp3 [--model small] [drums electric_bass]
 pluginval --strictness-level 10 --validate ~/Library/Audio/Plug-Ins/VST3/Audio2MIDI.vst3
 packaging/macos/build-pkg.sh build/Audio2Midi_artefacts/Release 0.2.0 Audio2MIDI-macOS.pkg
 ```

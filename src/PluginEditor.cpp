@@ -122,6 +122,14 @@ Audio2MidiEditor::Audio2MidiEditor (Audio2MidiProcessor& p)
     };
     playButton.onClick = [this] { audioProcessor.isPreviewing() ? audioProcessor.stopPreview() : audioProcessor.startPreview(); };
 
+    for (const auto& name : a2m::modelNames())
+        modelBox.addItem (displayName (name) + " model", modelBox.getNumItems() + 1);
+
+    modelBox.setTitle ("Model size");
+    modelBox.setTooltip ("Larger models are more accurate but slower. Each size downloads its own weights.");
+    modelBox.onChange = [this] { audioProcessor.model = shownModel = modelBox.getSelectedItemIndex(); };
+    addAndMakeVisible (modelBox);
+
     alignButton.setToggleState (audioProcessor.alignToBeats, juce::dontSendNotification);
     alignButton.onClick = [this] { audioProcessor.alignToBeats = alignButton.getToggleState(); };
     addAndMakeVisible (alignButton);
@@ -209,7 +217,9 @@ void Audio2MidiEditor::resized()
     recordButton.setBounds (controls.removeFromLeft (84));
     transcribeButton.setBounds (controls.removeFromRight (104));
     controls.removeFromRight (8);
-    instrumentsButton.setBounds (controls.removeFromRight (180));
+    instrumentsButton.setBounds (controls.removeFromRight (168));
+    controls.removeFromRight (8);
+    modelBox.setBounds (controls.removeFromRight (116));
 
     area.removeFromTop (12);
     auto statusRow = area.removeFromTop (22);
@@ -331,6 +341,13 @@ void Audio2MidiEditor::timerCallback()
     recordButton.setEnabled (! busy);
     recordButton.setButtonText (recording ? "Stop" : "Record");
     instrumentsButton.setEnabled (! busy);
+    modelBox.setEnabled (! busy);
+
+    // Only follow real changes, e.g. a restored state: onChange arrives asynchronously, so a
+    // selection would otherwise be reset to the old model before it reaches the processor.
+    if (audioProcessor.model != shownModel)
+        modelBox.setSelectedItemIndex (shownModel = audioProcessor.model, juce::dontSendNotification);
+
     transcribeButton.setButtonText (busy ? "Cancel" : "Transcribe");
     transcribeButton.setEnabled (busy || (! recording && audioProcessor.getSource().existsAsFile()));
     revealButton.setEnabled (! status.parts.empty());

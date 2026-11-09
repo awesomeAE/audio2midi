@@ -64,6 +64,7 @@ public:
     bool canPreviewMidi() const;
 
     juce::StringArray instruments; // empty: let the model decide
+    std::atomic<int> model { a2m::modelNames().indexOf (a2m::defaultModel) }; // index into a2m::modelNames()
     std::atomic<bool> alignToBeats { false };
     std::atomic<float> previewMix { 0.5f }; // 0: source audio only, 1: MIDI only
 

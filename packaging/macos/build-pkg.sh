@@ -1,7 +1,7 @@
 #!/bin/sh
 # Builds Audio2MIDI.pkg, which installs the VST3 and AU into the current user's
 # ~/Library/Audio/Plug-Ins without asking for an administrator password.
-# Usage: packaging/macos/build-pkg.sh build/Audio2Midi_artefacts/Release 0.2.0 Audio2MIDI.pkg
+# Usage: packaging/macos/build-pkg.sh build/Audio2Midi_artefacts/Release 0.3.0 Audio2MIDI.pkg
 set -eu
 
 artefacts=$1

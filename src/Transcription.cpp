@@ -111,7 +111,7 @@ std::vector<PartData> splitParts (const juce::MemoryBlock& midi)
     }
 
     if (! parts.empty())
-        parts.insert (parts.begin(), { "All parts", midi, total });
+        parts.insert (parts.begin(), { NEEDS_TRANS ("All parts"), midi, total });
 
     return parts;
 }
@@ -119,7 +119,7 @@ std::vector<PartData> splitParts (const juce::MemoryBlock& midi)
 juce::Result writeParts (const juce::MemoryBlock& midi, const juce::File& dir, const juce::String& baseName, std::vector<Part>& parts)
 {
     if (! dir.createDirectory())
-        return fail ("Could not create " + dir.getFullPathName());
+        return fail (TRANS ("Could not create %path%").replace ("%path%", dir.getFullPathName()));
 
     // A leading "~" would make JUCE treat the name as a home-relative path; a short base keeps
     // createLegalFileName from truncating part names into each other.
@@ -130,7 +130,7 @@ juce::Result writeParts (const juce::MemoryBlock& midi, const juce::File& dir, c
         const auto file = dir.getNonexistentChildFile (juce::File::createLegalFileName (base + " - " + part.name), ".mid", false);
 
         if (! file.replaceWithData (part.midi.getData(), part.midi.getSize()))
-            return fail ("Could not write " + file.getFullPathName());
+            return fail (TRANS ("Could not write %path%").replace ("%path%", file.getFullPathName()));
 
         parts.push_back ({ part.name, part.notes, file });
     }
@@ -158,12 +158,14 @@ Status finishedStatus (const juce::MemoryBlock& midi, const juce::MemoryBlock& a
 
     if (done.parts.empty())
     {
-        done.message = "No notes found.";
+        done.message = TRANS ("No notes found.");
         return done;
     }
 
     done.notes = done.parts.front().notes;
-    done.message = juce::String (done.notes) + " notes in " + juce::String (done.parts.size() - 1) + (done.parts.size() == 2 ? " part" : " parts");
+    done.message = (done.parts.size() == 2 ? TRANS ("%notes% notes in 1 part") : TRANS ("%notes% notes in %parts% parts"))
+                       .replace ("%notes%", juce::String (done.notes))
+                       .replace ("%parts%", juce::String (done.parts.size() - 1));
 
     if (! alignedMidi.isEmpty())
         if (const auto written = writeParts (alignedMidi, dir.getChildFile ("Aligned"), baseName, done.alignedParts); written.failed())
@@ -269,7 +271,7 @@ juce::Result Engine::ensureRunning (juce::Thread& caller, const juce::String& mo
     while (! launchLock.tryEnter())
     {
         if (caller.threadShouldExit())
-            return fail ("Cancelled.");
+            return fail (TRANS ("Cancelled."));
 
         caller.wait (100);
     }
@@ -287,7 +289,7 @@ juce::Result Engine::ensureRunning (juce::Thread& caller, const juce::String& mo
     if (server != nullptr && server->isRunning() && serverModel != model)
     {
         if (users > 0)
-            return fail ("The engine is busy with a transcription on the " + serverModel + " model. Try again when it has finished.");
+            return fail (TRANS ("The engine is busy with a transcription on the %model% model. Try again when it has finished.").replace ("%model%", serverModel));
 
         stop();
     }
@@ -300,19 +302,19 @@ juce::Result Engine::ensureRunning (juce::Thread& caller, const juce::String& mo
             return launched;
     }
 
-    report ("Loading the model. The first run downloads the weights.");
+    report (TRANS ("Loading the model. The first run downloads the weights."));
 
     while (! isServing())
     {
         if (caller.threadShouldExit())
-            return fail ("Cancelled.");
+            return fail (TRANS ("Cancelled."));
 
         if (! server->isRunning())
         {
             stop(); // joins the output reader, so the output below is complete
             const auto details = recentOutput();
             const auto error = details.lastIndexOf ("Error:");
-            return fail ("The transcription engine stopped.\n\n" + (error >= 0 ? details.substring (error) : details).trim());
+            return fail (TRANS ("The transcription engine stopped.") + "\n\n" + (error >= 0 ? details.substring (error) : details).trim());
         }
 
         caller.wait (500);
@@ -327,25 +329,25 @@ juce::Result Engine::launch (juce::Thread& caller, const juce::String& model, co
     const auto uvx = findUvx();
 
     if (uvx == juce::File())
-        return fail ("uv was not found. Install it from https://docs.astral.sh/uv/ and try again.");
+        return fail (TRANS ("uv was not found. Install it from https://docs.astral.sh/uv/ and try again."));
 
     // Resolve the engine's Python environment, then run that Python directly: killing a uvx
     // wrapper would leave the server orphaned on the port. 3.12 has PyTorch wheels everywhere,
     // including Intel Macs.
-    report ("Installing the transcription engine. The first run downloads about 1 GB.");
+    report (TRANS ("Installing the transcription engine. The first run downloads about 1 GB."));
     juce::ChildProcess installer;
 
     if (! installer.start (juce::StringArray { uvx.getFullPathName(), "--quiet", "--python", "3.12",
                                                "--from", juce::String ("muscriptor==") + engineVersion,
                                                "python", "-I", "-X", "utf8", "-c", "import sys; print(sys.executable)" }))
-        return fail ("Could not run " + uvx.getFullPathName());
+        return fail (TRANS ("Could not run %path%").replace ("%path%", uvx.getFullPathName()));
 
     while (installer.isRunning())
     {
         if (caller.threadShouldExit())
         {
             installer.kill();
-            return fail ("Cancelled.");
+            return fail (TRANS ("Cancelled."));
         }
 
         installer.waitForProcessToFinish (200);
@@ -359,9 +361,9 @@ juce::Result Engine::launch (juce::Thread& caller, const juce::String& model, co
             python = juce::File (path);
 
     if (installer.getExitCode() != 0 || python == juce::File())
-        return fail ("Installing the transcription engine failed.\n\n" + installOutput.trim());
+        return fail (TRANS ("Installing the transcription engine failed.") + "\n\n" + installOutput.trim());
 
-    report ("Starting the transcription engine.");
+    report (TRANS ("Starting the transcription engine."));
     server = std::make_unique<juce::ChildProcess>();
 
     // -I: never import modules from the host's working directory or PYTHON* variables.
@@ -383,7 +385,7 @@ juce::Result Engine::launch (juce::Thread& caller, const juce::String& model, co
                                              "--host", "127.0.0.1", "--port", juce::String (enginePort), "--model", model }))
     {
         server.reset();
-        return fail ("Could not start " + python.getFullPathName());
+        return fail (TRANS ("Could not start %path%").replace ("%path%", python.getFullPathName()));
     }
 
     serverModel = model;
@@ -454,7 +456,7 @@ TranscriptionJob::~TranscriptionJob()
 
 void TranscriptionJob::run()
 {
-    publish (Status::Stage::startingEngine, "Starting the transcription engine.", -1.0);
+    publish (Status::Stage::startingEngine, TRANS ("Starting the transcription engine."), -1.0);
 
     const auto ready = engine.ensureRunning (*this, model, [this] (const juce::String& message)
     {
@@ -474,7 +476,7 @@ void TranscriptionJob::run()
     if (threadShouldExit())
         return;
 
-    publish (Status::Stage::transcribing, "Transcribing", 0.0);
+    publish (Status::Stage::transcribing, TRANS ("Transcribing"), 0.0);
     StreamState state;
 
     if (const auto result = transcribe (state); result.failed())
@@ -489,7 +491,7 @@ void TranscriptionJob::run()
     juce::String alignError;
 
     if (! state.beatGrid.isObject())
-        alignError = "No beat was found in this audio.";
+        alignError = TRANS ("No beat was found in this audio.");
     else if (const auto result = align (state, aligned); result.failed())
         alignError = result.getErrorMessage();
 
@@ -501,7 +503,7 @@ juce::Result TranscriptionJob::transcribe (StreamState& state)
 {
     // The upload is buffered in memory inside the host, so keep it far from what could take a DAW down.
     if (audio.getSize() > 250 * 1024 * 1024)
-        return fail ("The audio file is larger than 250 MB. Transcribe a shorter section.");
+        return fail (TRANS ("The audio file is larger than 250 MB. Transcribe a shorter section."));
 
     auto url = Engine::url ("/transcribe").withFileToUpload ("file", audio, "application/octet-stream");
 
@@ -516,7 +518,7 @@ juce::Result TranscriptionJob::transcribe (StreamState& state)
         const juce::ScopedLock sl (streamLock);
 
         if (threadShouldExit())
-            return fail ("Cancelled.");
+            return fail (TRANS ("Cancelled."));
 
         activeStream = &stream;
     }
@@ -524,16 +526,16 @@ juce::Result TranscriptionJob::transcribe (StreamState& state)
     const juce::ScopeGuard forget { [this] { const juce::ScopedLock sl (streamLock); activeStream = nullptr; } };
 
     if (! stream.connect (nullptr))
-        return fail ("Could not reach the transcription engine.");
+        return fail (TRANS ("Could not reach the transcription engine."));
 
     if (const auto status = stream.getStatusCode(); status != 200)
     {
         if (status == 503)
-            return fail ("The engine is busy with another transcription. Try again when it has finished.");
+            return fail (TRANS ("The engine is busy with another transcription. Try again when it has finished."));
 
         const auto body = stream.readEntireStreamAsString();
         const auto detail = juce::JSON::parse (body)["detail"].toString();
-        return fail ("The engine rejected the audio (HTTP " + juce::String (status) + "): " + (detail.isNotEmpty() ? detail : body));
+        return fail (TRANS ("The engine rejected the audio (HTTP %status%):").replace ("%status%", juce::String (status)) + " " + (detail.isNotEmpty() ? detail : body));
     }
 
     auto reportedNotes = -1, reportedChunks = -1;
@@ -547,15 +549,15 @@ juce::Result TranscriptionJob::transcribe (StreamState& state)
             reportedNotes = (int) state.notes.size();
             reportedChunks = state.completedChunks;
             const auto progress = state.totalChunks > 0 ? (double) state.completedChunks / state.totalChunks : 0.0;
-            publish (Status::Stage::transcribing, "Transcribing", progress, reportedNotes);
+            publish (Status::Stage::transcribing, TRANS ("Transcribing"), progress, reportedNotes);
         }
     }
 
     if (threadShouldExit())
-        return fail ("Cancelled.");
+        return fail (TRANS ("Cancelled."));
 
     if (! state.midi.has_value())
-        return fail ("The engine stopped before the transcription finished.");
+        return fail (TRANS ("The engine stopped before the transcription finished."));
 
     return juce::Result::ok();
 }
@@ -570,7 +572,7 @@ juce::Result TranscriptionJob::align (const StreamState& state, juce::MemoryBloc
                                                     .withConnectionTimeoutMs (60 * 1000)
                                                     .withStatusCode (&status));
     if (stream == nullptr)
-        return fail ("Could not reach the transcription engine to align the notes.");
+        return fail (TRANS ("Could not reach the transcription engine to align the notes."));
 
     stream->readIntoMemoryBlock (aligned);
 
@@ -578,7 +580,7 @@ juce::Result TranscriptionJob::align (const StreamState& state, juce::MemoryBloc
     {
         const auto body = aligned.toString().substring (0, 300);
         aligned.reset();
-        return fail ("Aligning the notes failed (HTTP " + juce::String (status) + "): " + body);
+        return fail (TRANS ("Aligning the notes failed (HTTP %status%):").replace ("%status%", juce::String (status)) + " " + body);
     }
 
     return juce::Result::ok();

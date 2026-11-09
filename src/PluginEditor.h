@@ -80,18 +80,18 @@ private:
     double progress = 0.0;
     juce::Rectangle<int> titleArea, dropZone, partsHeader, mixArea;
 
-    juce::TextButton chooseButton { "Choose file" }, recordButton { "Record" },
-                     instrumentsButton, transcribeButton { "Transcribe" }, revealButton { "Show files" },
-                     playButton { "Play" };
+    juce::TextButton chooseButton { TRANS ("Choose file") }, recordButton { TRANS ("Record") },
+                     instrumentsButton, transcribeButton { TRANS ("Transcribe") }, revealButton { TRANS ("Show files") },
+                     playButton { TRANS ("Play") };
     juce::ComboBox modelBox, themeBox;
     int shownModel = -1; // the processor's model as modelBox last showed it
-    juce::ToggleButton alignButton { "Align to beats" };
+    juce::ToggleButton alignButton { TRANS ("Align to beats") };
     juce::Slider mixSlider { juce::Slider::LinearHorizontal, juce::Slider::NoTextBox };
     juce::Label positionLabel;
     juce::ProgressBar progressBar { progress };
     juce::Label statusLabel;
     PianoRoll pianoRoll { audioProcessor };
-    juce::ListBox partsList { "Parts", this };
+    juce::ListBox partsList { TRANS ("Parts"), this };
     juce::TextEditor details;
     juce::TooltipWindow tooltips { this };
     std::unique_ptr<juce::FileChooser> chooser;

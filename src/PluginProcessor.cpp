@@ -1,16 +1,33 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include <BinaryData.h>
 
 namespace
 {
 // The upload limit for one transcription (see TranscriptionJob).
 constexpr juce::int64 maxRecordingBytes = 250 * 1024 * 1024;
+
+// Shows the UI in the system's display language when i18n/ has a table for it, else in English.
+void useSystemLanguage()
+{
+    [[maybe_unused]] static const auto loaded = []
+    {
+        const auto language = juce::SystemStats::getDisplayLanguage().upToFirstOccurrenceOf ("-", false, false).toLowerCase();
+        int size = 0;
+
+        if (const auto* table = BinaryData::getNamedResource ((language + "_txt").toRawUTF8(), size))
+            juce::LocalisedStrings::setCurrentMappings (new juce::LocalisedStrings (juce::String::fromUTF8 (table, size), false));
+
+        return true;
+    }();
+}
 } // namespace
 
 Audio2MidiProcessor::Audio2MidiProcessor()
     : AudioProcessor (BusesProperties().withInput ("Input", juce::AudioChannelSet::stereo(), true)
                                        .withOutput ("Output", juce::AudioChannelSet::stereo(), true))
 {
+    useSystemLanguage();
     formats.registerBasicFormats();
 }
 
@@ -326,16 +343,16 @@ juce::String Audio2MidiProcessor::stopRecording()
     if (recordedSamples == 0)
     {
         recordingFile.deleteFile();
-        return "Nothing was recorded. Start playback in your DAW so the track's audio reaches the plug-in.";
+        return TRANS ("Nothing was recorded. Start playback in your DAW so the track's audio reaches the plug-in.");
     }
 
     setSource (recordingFile);
 
     if (droppedBlocks > 0)
-        return "The recording has gaps because the disk could not keep up. Record again for a clean take.";
+        return TRANS ("The recording has gaps because the disk could not keep up. Record again for a clean take.");
 
     if (recordingFull)
-        return "Recording stopped at the 250 MB limit for one transcription.";
+        return TRANS ("Recording stopped at the 250 MB limit for one transcription.");
 
     return {};
 }

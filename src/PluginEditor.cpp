@@ -14,10 +14,16 @@ juce::String formatDuration (double seconds)
 juce::String displayName (const juce::String& instrument)
 {
     const auto spaced = instrument.replaceCharacter ('_', ' ');
-    return spaced.substring (0, 1).toUpperCase() + spaced.substring (1);
+    return TRANS (spaced.substring (0, 1).toUpperCase() + spaced.substring (1));
 }
 
-const juce::StringArray themeNames { "Default", "Graphite" };
+const juce::StringArray themeNames { NEEDS_TRANS ("Default"), "Graphite" };
+const juce::StringArray modelLabels { NEEDS_TRANS ("Small model"), NEEDS_TRANS ("Medium model"), NEEDS_TRANS ("Large model") };
+
+juce::String noteCount (int notes)
+{
+    return TRANS ("%count% notes").replace ("%count%", juce::String (notes));
+}
 
 bool isBusy (const a2m::Status& status)
 {
@@ -27,8 +33,8 @@ bool isBusy (const a2m::Status& status)
 
 PianoRoll::PianoRoll (Audio2MidiProcessor& p) : processor (p)
 {
-    setTitle ("Notes");
-    setDescription ("Left and right arrow keys move the playhead by 5 seconds.");
+    setTitle (TRANS ("Notes"));
+    setDescription (TRANS ("Left and right arrow keys move the playhead by 5 seconds."));
     setWantsKeyboardFocus (true);
 }
 
@@ -54,7 +60,7 @@ void PianoRoll::paint (juce::Graphics& g)
     {
         g.setColour (text.withAlpha (0.4f));
         g.setFont (juce::FontOptions (13.0f));
-        g.drawText ("No notes to show", getLocalBounds(), juce::Justification::centred);
+        g.drawText (TRANS ("No notes to show"), getLocalBounds(), juce::Justification::centred);
     }
     else
     {
@@ -154,19 +160,22 @@ Audio2MidiEditor::Audio2MidiEditor (Audio2MidiProcessor& p)
     };
     playButton.onClick = [this] { audioProcessor.isPreviewing() ? audioProcessor.stopPreview() : audioProcessor.startPreview(); };
 
-    for (const auto& name : a2m::modelNames())
-        modelBox.addItem (displayName (name) + " model", modelBox.getNumItems() + 1);
+    jassert (modelLabels.size() == a2m::modelNames().size());
+    for (const auto& label : modelLabels)
+        modelBox.addItem (TRANS (label), modelBox.getNumItems() + 1);
 
-    modelBox.setTitle ("Model size");
-    modelBox.setTooltip ("Larger models are more accurate but slower. Each size downloads its own weights.");
+    modelBox.setTitle (TRANS ("Model size"));
+    modelBox.setTooltip (TRANS ("Larger models are more accurate but slower. Each size downloads its own weights."));
     modelBox.onChange = [this] { audioProcessor.model = shownModel = modelBox.getSelectedItemIndex(); };
     addAndMakeVisible (modelBox);
 
-    themeBox.addItemList (themeNames, 1);
-    themeBox.setTitle ("Theme");
+    for (const auto& name : themeNames)
+        themeBox.addItem (TRANS (name), themeBox.getNumItems() + 1);
+    themeBox.setTitle (TRANS ("Theme"));
     themeBox.onChange = [this]
     {
-        settings.setValue ("theme", themeBox.getText());
+        // The untranslated name, so the choice survives a change of system language.
+        settings.setValue ("theme", themeNames[themeBox.getSelectedItemIndex()]);
         applyTheme (themeBox.getSelectedItemIndex());
     };
     addAndMakeVisible (themeBox);
@@ -175,7 +184,7 @@ Audio2MidiEditor::Audio2MidiEditor (Audio2MidiProcessor& p)
     alignButton.onClick = [this] { audioProcessor.alignToBeats = alignButton.getToggleState(); };
     addAndMakeVisible (alignButton);
 
-    mixSlider.setTitle ("Audio and MIDI mix");
+    mixSlider.setTitle (TRANS ("Audio and MIDI mix"));
     mixSlider.setRange (0.0, 1.0);
     mixSlider.setValue (audioProcessor.previewMix, juce::dontSendNotification);
     mixSlider.onValueChange = [this] { audioProcessor.previewMix = (float) mixSlider.getValue(); };
@@ -191,7 +200,7 @@ Audio2MidiEditor::Audio2MidiEditor (Audio2MidiProcessor& p)
     details.setMultiLine (true);
     details.setReadOnly (true);
     details.setScrollbarsShown (true);
-    details.setTitle ("Error details");
+    details.setTitle (TRANS ("Error details"));
     addChildComponent (details);
 
     refreshInstrumentButton();
@@ -237,23 +246,25 @@ void Audio2MidiEditor::paint (juce::Graphics& g)
     g.fillPath (dashed);
 
     const auto source = audioProcessor.getSource();
-    const auto recording = (audioProcessor.isRecordingPaused() ? "Recording paused until playback starts  " : "Recording  ")
-                         + formatDuration (audioProcessor.recordedSeconds());
+    const auto recording = (audioProcessor.isRecordingPaused() ? TRANS ("Recording paused until playback starts") : TRANS ("Recording"))
+                         + "  " + formatDuration (audioProcessor.recordedSeconds());
     const auto line = audioProcessor.isRecording() ? recording
                     : source.existsAsFile()   ? source.getFileName()
-                                              : juce::String ("Drop an audio file");
+                                              : TRANS ("Drop an audio file");
     g.setColour (text);
     g.setFont (juce::FontOptions (16.0f));
     g.drawFittedText (line, dropZone.reduced (16), juce::Justification::centred, 2);
 
     g.setFont (juce::FontOptions (14.0f, juce::Font::bold));
-    g.drawText ("Parts", partsHeader, juce::Justification::centredLeft);
+    const auto partsTitle = TRANS ("Parts");
+    g.drawText (partsTitle, partsHeader, juce::Justification::centredLeft);
+    const auto titleWidth = juce::roundToInt (juce::GlyphArrangement::getStringWidth (g.getCurrentFont(), partsTitle));
     g.setColour (text.withAlpha (0.6f));
     g.setFont (juce::FontOptions (13.0f));
-    g.drawText ("Drag into your DAW", partsHeader.withTrimmedLeft (48), juce::Justification::centredLeft);
+    g.drawText (TRANS ("Drag into your DAW"), partsHeader.withTrimmedLeft (titleWidth + 12), juce::Justification::centredLeft);
 
     g.setColour (text.withAlpha (mixSlider.isEnabled() ? 0.8f : 0.4f));
-    g.drawText ("Audio", mixArea.withWidth (44), juce::Justification::centredRight);
+    g.drawText (TRANS ("Audio"), mixArea.withWidth (44), juce::Justification::centredRight);
     g.drawText ("MIDI", mixArea.withTrimmedLeft (mixArea.getWidth() - 40), juce::Justification::centredLeft);
 }
 
@@ -296,7 +307,7 @@ void Audio2MidiEditor::resized()
 
     area.removeFromTop (8);
     partsHeader = area.removeFromTop (28);
-    revealButton.setBounds (partsHeader.removeFromRight (104));
+    revealButton.setBounds (partsHeader.removeFromRight (128));
     area.removeFromTop (4);
     partsList.setBounds (area);
     details.setBounds (area);
@@ -345,8 +356,8 @@ void Audio2MidiEditor::paintListBoxItem (int row, juce::Graphics& g, int width, 
         g.drawRoundedRectangle (card, 8.0f, 1.0f);
 
         juce::AttributedString label;
-        label.append (part.name + " ", juce::FontOptions (14.0f), text);
-        label.append ("(" + juce::String (part.notes) + " notes)", juce::FontOptions (12.0f), text.withAlpha (0.5f));
+        label.append (TRANS (part.name) + " ", juce::FontOptions (14.0f), text);
+        label.append ("(" + noteCount (part.notes) + ")", juce::FontOptions (12.0f), text.withAlpha (0.5f));
         label.setJustification (juce::Justification::centredLeft);
         label.draw (g, card.reduced (14.0f, 0.0f));
         return;
@@ -358,9 +369,9 @@ void Audio2MidiEditor::paintListBoxItem (int row, juce::Graphics& g, int width, 
     const auto bounds = juce::Rectangle<int> (width, height).reduced (10, 0);
     g.setColour (text);
     g.setFont (juce::FontOptions (15.0f, row == 0 ? juce::Font::bold : juce::Font::plain));
-    g.drawText (part.name, bounds, juce::Justification::centredLeft);
+    g.drawText (TRANS (part.name), bounds, juce::Justification::centredLeft);
     g.setColour (text.withAlpha (0.6f));
-    g.drawText (juce::String (part.notes) + " notes", bounds, juce::Justification::centredRight);
+    g.drawText (noteCount (part.notes), bounds, juce::Justification::centredRight);
 }
 
 juce::String Audio2MidiEditor::getNameForRow (int row)
@@ -369,7 +380,7 @@ juce::String Audio2MidiEditor::getNameForRow (int row)
         return {};
 
     const auto& part = status.parts[(size_t) row];
-    return part.name + ", " + juce::String (part.notes) + " notes";
+    return TRANS (part.name) + ", " + noteCount (part.notes);
 }
 
 void Audio2MidiEditor::selectedRowsChanged (int) { previewSelectedPart(); }
@@ -410,7 +421,7 @@ void Audio2MidiEditor::timerCallback()
     progressBar.setVisible (busy);
     chooseButton.setEnabled (! busy && ! recording);
     recordButton.setEnabled (! busy);
-    recordButton.setButtonText (recording ? "Stop" : "Record");
+    recordButton.setButtonText (recording ? TRANS ("Stop") : TRANS ("Record"));
     instrumentsButton.setEnabled (! busy);
     modelBox.setEnabled (! busy);
 
@@ -419,11 +430,11 @@ void Audio2MidiEditor::timerCallback()
     if (audioProcessor.model != shownModel)
         modelBox.setSelectedItemIndex (shownModel = audioProcessor.model, juce::dontSendNotification);
 
-    transcribeButton.setButtonText (busy ? "Cancel" : "Transcribe");
+    transcribeButton.setButtonText (busy ? TRANS ("Cancel") : TRANS ("Transcribe"));
     transcribeButton.setEnabled (busy || (! recording && audioProcessor.getSource().existsAsFile()));
     revealButton.setEnabled (! status.parts.empty());
 
-    playButton.setButtonText (previewing ? "Stop" : "Play");
+    playButton.setButtonText (previewing ? TRANS ("Stop") : TRANS ("Play"));
     playButton.setEnabled (previewing || (! recording && length > 0.0 && (audioProcessor.canPreviewMidi() || audioProcessor.getSource().existsAsFile())));
     positionLabel.setText (length > 0.0 ? formatDuration (audioProcessor.getPreviewPosition()) + " / " + formatDuration (length) : juce::String(),
                            juce::dontSendNotification);
@@ -435,12 +446,12 @@ void Audio2MidiEditor::timerCallback()
     if (! mixSlider.isMouseButtonDown())
         mixSlider.setValue (audioProcessor.previewMix, juce::dontSendNotification);
     alignButton.setTooltip (status.alignedParts.empty() && status.alignError.isNotEmpty() ? status.alignError
-                                                                                        : "Moves every note onto the detected beat grid.");
+                                                                                        : TRANS ("Moves every note onto the detected beat grid."));
 
-    const auto message = audioProcessor.isPreviewWaitingForHost()     ? juce::String ("Start playback in your DAW to hear the preview.")
+    const auto message = audioProcessor.isPreviewWaitingForHost()     ? TRANS ("Start playback in your DAW to hear the preview.")
                        : status.stage == a2m::Status::Stage::idle         ? notice
-                       : status.stage == a2m::Status::Stage::transcribing ? "Transcribing, " + juce::String (status.notes) + " notes"
-                       : failed                                           ? juce::String ("Transcription failed")
+                       : status.stage == a2m::Status::Stage::transcribing ? TRANS ("Transcribing, %notes% notes").replace ("%notes%", juce::String (status.notes))
+                       : failed                                           ? TRANS ("Transcription failed")
                                                                           : status.message;
     statusLabel.setText (message, juce::dontSendNotification);
 
@@ -472,7 +483,7 @@ void Audio2MidiEditor::timerCallback()
 
 void Audio2MidiEditor::chooseFile()
 {
-    chooser = std::make_unique<juce::FileChooser> ("Choose audio to transcribe", juce::File(),
+    chooser = std::make_unique<juce::FileChooser> (TRANS ("Choose audio to transcribe"), juce::File(),
                                                    "*." + audioExtensions.replace (";", ";*."));
     chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
                           [this] (const juce::FileChooser& fc)
@@ -492,7 +503,7 @@ void Audio2MidiEditor::toggleRecording()
     if (audioProcessor.isRecording())
         notice = audioProcessor.stopRecording();
     else if (! audioProcessor.startRecording())
-        notice = "Recording needs an audio input and a running audio engine.";
+        notice = TRANS ("Recording needs an audio input and a running audio engine.");
 
     repaint();
 }
@@ -500,7 +511,7 @@ void Audio2MidiEditor::toggleRecording()
 void Audio2MidiEditor::showInstrumentMenu()
 {
     juce::PopupMenu menu;
-    menu.addItem ("Detect automatically", true, audioProcessor.instruments.isEmpty(), [this]
+    menu.addItem (TRANS ("Detect automatically"), true, audioProcessor.instruments.isEmpty(), [this]
     {
         audioProcessor.instruments.clear();
         refreshInstrumentButton();
@@ -525,7 +536,7 @@ void Audio2MidiEditor::showInstrumentMenu()
 void Audio2MidiEditor::refreshInstrumentButton()
 {
     const auto& selected = audioProcessor.instruments;
-    instrumentsButton.setButtonText ("Instruments: " + (selected.isEmpty()   ? juce::String ("auto")
-                                                        : selected.size() == 1 ? displayName (selected[0])
-                                                                               : juce::String (selected.size()) + " selected"));
+    instrumentsButton.setButtonText (selected.isEmpty()   ? TRANS ("Instruments: auto")
+                                   : selected.size() == 1 ? TRANS ("Instruments: %name%").replace ("%name%", displayName (selected[0]))
+                                                          : TRANS ("Instruments: %count% selected").replace ("%count%", juce::String (selected.size())));
 }

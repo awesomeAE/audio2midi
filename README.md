@@ -82,12 +82,14 @@ JUCE 9.0.5 is fetched by CMake. The VST3 and AU are copied to `~/Library/Audio/P
 7. Drag **All parts** or a single instrument into your DAW. **Show files** opens the MIDI files.
 8. Pick a theme in the top-right menu: **Default** or **Graphite**, a near-black look with outlined controls. The choice applies to every instance.
 
+The plugin shows its interface in your macOS system language: English, German, Spanish or French. Other languages fall back to English.
+
 The MIDI files carry the detected tempo and meter, so they land on the grid. The result is saved with your project and comes back when you reopen it.
 
 ## Test
 
 ```bash
-ctest --test-dir build                                    # unit tests
+ctest --test-dir build                                    # unit tests and translation table check
 build/Audio2MidiTests_artefacts/Release/Audio2MidiTests --e2e song.mp3 [--model small] [drums electric_bass]
 pluginval --strictness-level 10 --validate ~/Library/Audio/Plug-Ins/VST3/Audio2MIDI.vst3
 packaging/macos/build-pkg.sh build/Audio2Midi_artefacts/Release 0.4.0 Audio2MIDI-macOS.pkg

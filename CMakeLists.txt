@@ -38,8 +38,10 @@ set(CORE_DEFINITIONS JUCE_WEB_BROWSER=0 JUCE_VST3_CAN_REPLACE_VST2=0)
 target_sources(Audio2Midi PRIVATE src/PluginProcessor.cpp src/PluginEditor.cpp src/Transcription.cpp)
 # AU hosting loads Apple's built-in General MIDI synth for the preview.
 target_compile_definitions(Audio2Midi PUBLIC ${CORE_DEFINITIONS} JUCE_PLUGINHOST_AU=1 JUCE_USE_MP3AUDIOFORMAT=1)
+# One table per UI language, picked at runtime from the system's display language.
+juce_add_binary_data(Audio2MidiTranslations SOURCES i18n/de.txt i18n/es.txt i18n/fr.txt)
 target_link_libraries(Audio2Midi
-    PRIVATE juce::juce_audio_utils
+    PRIVATE Audio2MidiTranslations juce::juce_audio_utils
     PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_lto_flags juce::juce_recommended_warning_flags)
 
 juce_add_console_app(Audio2MidiTests PRODUCT_NAME "Audio2MidiTests" NEEDS_CURL TRUE)
@@ -52,3 +54,7 @@ target_link_libraries(Audio2MidiTests
 
 enable_testing()
 add_test(NAME unit COMMAND Audio2MidiTests)
+find_package(Python3 COMPONENTS Interpreter)
+if(Python3_FOUND)
+    add_test(NAME translations COMMAND Python3::Interpreter -I ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_translations.py)
+endif()

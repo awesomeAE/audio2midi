@@ -39,6 +39,8 @@ Thread-Modell: Alles in `Audio2MidiProcessor` mit Kommentar „Message thread on
 
 ## Fallstricke
 
+- UI-Texte laufen über `TRANS` (bzw. `NEEDS_TRANS` für Namen, die erst später übersetzt werden) und brauchen einen Eintrag in jeder `i18n/*.txt`. Die Sprache folgt `SystemStats::getDisplayLanguage()` (einmal in `useSystemLanguage`), Englisch ist Quelltext und Fallback. Gespeicherte Werte (State, Settings, Dateinamen wie „All parts“) bleiben englisch. `ctest` prüft die Tabellen per `tests/check_translations.py`. Website-Texte stehen in `site/src/i18n/*.ts`, `tsc` erzwingt vollständige Wörterbücher.
+
 - Port **8722** (`a2m::enginePort`) ist bewusst gewählt, um nicht mit anderen lokalen Servern zu kollidieren. Nicht ändern.
 - Upload-Limit 250 MB (Datei wird im Host-Speicher gepuffert), Verbindungs-Timeout 10 Minuten.
 - Das HuggingFace-Token liegt in `~/.cache/huggingface/token`. Die Modellgewichte sind gated (CC BY-NC 4.0) und werden nie gebündelt.

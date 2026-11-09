@@ -8,7 +8,10 @@ Audio-to-MIDI plugin (VST3, AU, Standalone). Put it on an audio track, drop in a
 
 Transcription runs locally with [MuScriptor](https://github.com/muscriptor/muscriptor) by Kyutai and Mirelo. This project is not affiliated with either.
 
-<p align="center"><img src="assets/preview.png" alt="Audio2MIDI plugin with a transcribed song in the piano roll" width="520"></p>
+<p align="center">
+  <img src="assets/preview.png" alt="Audio2MIDI with the Default theme" width="400">
+  <img src="assets/preview-graphite.png" alt="Audio2MIDI with the Graphite theme" width="400">
+</p>
 
 ## Audio2MIDI vs. Mirelo
 
@@ -75,6 +78,7 @@ JUCE 9.0.5 is fetched by CMake. The VST3 and AU are copied to `~/Library/Audio/P
 5. Select a part and press **Play** to hear it. The preview plays through the track: the slider mixes the original audio with the MIDI, played by macOS's built-in General MIDI sounds. Click the piano roll to jump. Some DAWs, such as Logic Pro, only run a track's plugins while the transport plays; the plugin tells you when that is the case.
 6. Turn on **Align to beats** to snap every note to the detected beat grid. Leave it off to keep the performance as played.
 7. Drag **All parts** or a single instrument into your DAW. **Show files** opens the MIDI files.
+8. Pick a theme in the top-right menu: **Default** or **Graphite**, a near-black look with outlined controls. The choice applies to every instance.
 
 The MIDI files carry the detected tempo and meter, so they land on the grid. The result is saved with your project and comes back when you reopen it.
 
@@ -84,7 +88,7 @@ The MIDI files carry the detected tempo and meter, so they land on the grid. The
 ctest --test-dir build                                    # unit tests
 build/Audio2MidiTests_artefacts/Release/Audio2MidiTests --e2e song.mp3 [--model small] [drums electric_bass]
 pluginval --strictness-level 10 --validate ~/Library/Audio/Plug-Ins/VST3/Audio2MIDI.vst3
-packaging/macos/build-pkg.sh build/Audio2Midi_artefacts/Release 0.3.0 Audio2MIDI-macOS.pkg
+packaging/macos/build-pkg.sh build/Audio2Midi_artefacts/Release 0.4.0 Audio2MIDI-macOS.pkg
 ```
 
 `--e2e` runs a real transcription through the same engine code the plugin uses. It starts and stops the engine when none is running.

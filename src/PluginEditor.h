@@ -15,10 +15,20 @@ public:
     void mouseDrag (const juce::MouseEvent&) override;
     bool keyPressed (const juce::KeyPress&) override;
 
+    bool pastelNotes = false;
+
 private:
     void seekTo (float x);
 
     Audio2MidiProcessor& processor;
+};
+
+/** Near-black panels, outlined rounded controls and pastel notes. */
+class GraphiteLookAndFeel final : public juce::LookAndFeel_V4
+{
+public:
+    GraphiteLookAndFeel();
+    void drawButtonBackground (juce::Graphics&, juce::Button&, const juce::Colour&, bool highlighted, bool down) override;
 };
 
 class Audio2MidiEditor final : public juce::AudioProcessorEditor,
@@ -51,8 +61,19 @@ private:
     void showInstrumentMenu();
     void refreshInstrumentButton();
     void previewSelectedPart();
+    void applyTheme (int index);
+    bool isGraphite() const { return &getLookAndFeel() == &graphite; }
 
     Audio2MidiProcessor& audioProcessor;
+    GraphiteLookAndFeel graphite; // declared before the components that use it
+    juce::PropertiesFile settings { [] {
+        juce::PropertiesFile::Options options;
+        options.applicationName = "Preferences";
+        options.folderName = "Audio2MIDI";
+        options.filenameSuffix = ".settings";
+        options.osxLibrarySubFolder = "Application Support";
+        return options;
+    }() };
     a2m::Status status;
     juce::String notice;
     bool dragOver = false, draggingPart = false;
@@ -62,7 +83,7 @@ private:
     juce::TextButton chooseButton { "Choose file" }, recordButton { "Record" },
                      instrumentsButton, transcribeButton { "Transcribe" }, revealButton { "Show files" },
                      playButton { "Play" };
-    juce::ComboBox modelBox;
+    juce::ComboBox modelBox, themeBox;
     int shownModel = -1; // the processor's model as modelBox last showed it
     juce::ToggleButton alignButton { "Align to beats" };
     juce::Slider mixSlider { juce::Slider::LinearHorizontal, juce::Slider::NoTextBox };

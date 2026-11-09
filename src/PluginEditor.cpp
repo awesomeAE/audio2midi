@@ -17,6 +17,8 @@ juce::String displayName (const juce::String& instrument)
     return spaced.substring (0, 1).toUpperCase() + spaced.substring (1);
 }
 
+const juce::StringArray themeNames { "Default", "Graphite" };
+
 bool isBusy (const a2m::Status& status)
 {
     return status.stage == a2m::Status::Stage::startingEngine || status.stage == a2m::Status::Stage::transcribing;
@@ -71,7 +73,8 @@ void PianoRoll::paint (juce::Graphics& g)
             const auto end = event->noteOffObject != nullptr ? event->noteOffObject->message.getTimeStamp() : start + 0.1;
             const auto x = secondsToX (start);
             // One colour per MIDI channel, which the engine assigns per instrument.
-            g.setColour (juce::Colour::fromHSV (std::fmod (0.58f + 0.17f * (float) note.getChannel(), 1.0f), 0.55f, 0.9f, 0.9f));
+            g.setColour (juce::Colour::fromHSV (std::fmod (0.58f + 0.17f * (float) note.getChannel(), 1.0f),
+                                                pastelNotes ? 0.38f : 0.55f, pastelNotes ? 0.92f : 0.9f, 0.9f));
             g.fillRect (x, area.getY() + rowHeight * (float) (high - note.getNoteNumber()),
                         juce::jmax (1.5f, secondsToX (end) - x), juce::jmax (1.0f, rowHeight - 0.5f));
         }
@@ -105,6 +108,35 @@ void PianoRoll::seekTo (float x)
     repaint();
 }
 
+GraphiteLookAndFeel::GraphiteLookAndFeel()
+    : juce::LookAndFeel_V4 ({ 0xff141414, 0xff1f1f1f, 0xff1c1c1c, 0xff353535, 0xfff2f2f2,
+                              0xffececec, 0xffffffff, 0xff2b2b2b, 0xfff2f2f2 })
+{
+    setColour (juce::TextButton::buttonColourId, juce::Colour (0xff1f1f1f));
+    setColour (juce::ComboBox::backgroundColourId, juce::Colour (0xff1f1f1f));
+    setColour (juce::ListBox::backgroundColourId, juce::Colour (0xff141414));
+    setColour (juce::TextEditor::highlightColourId, juce::Colour (0xff3d5f8a));
+    setColour (juce::Slider::trackColourId, juce::Colour (0xffececec));
+    setColour (juce::Slider::backgroundColourId, juce::Colour (0xff353535));
+    setColour (juce::ProgressBar::backgroundColourId, juce::Colour (0xff1f1f1f));
+    setColour (juce::ProgressBar::foregroundColourId, juce::Colour (0xff8db4e2));
+}
+
+void GraphiteLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& button, const juce::Colour& background,
+                                                bool highlighted, bool down)
+{
+    const auto bounds = button.getLocalBounds().toFloat().reduced (0.5f);
+    auto fill = background.withMultipliedAlpha (button.isEnabled() ? 1.0f : 0.5f);
+
+    if (down || highlighted)
+        fill = fill.brighter (down ? 0.25f : 0.12f);
+
+    g.setColour (fill);
+    g.fillRoundedRectangle (bounds, 8.0f);
+    g.setColour (findColour (juce::ComboBox::outlineColourId).withMultipliedAlpha (button.isEnabled() ? 1.0f : 0.5f));
+    g.drawRoundedRectangle (bounds, 8.0f, 1.0f);
+}
+
 Audio2MidiEditor::Audio2MidiEditor (Audio2MidiProcessor& p)
     : AudioProcessorEditor (p), audioProcessor (p)
 {
@@ -130,6 +162,15 @@ Audio2MidiEditor::Audio2MidiEditor (Audio2MidiProcessor& p)
     modelBox.onChange = [this] { audioProcessor.model = shownModel = modelBox.getSelectedItemIndex(); };
     addAndMakeVisible (modelBox);
 
+    themeBox.addItemList (themeNames, 1);
+    themeBox.setTitle ("Theme");
+    themeBox.onChange = [this]
+    {
+        settings.setValue ("theme", themeBox.getText());
+        applyTheme (themeBox.getSelectedItemIndex());
+    };
+    addAndMakeVisible (themeBox);
+
     alignButton.setToggleState (audioProcessor.alignToBeats, juce::dontSendNotification);
     alignButton.onClick = [this] { audioProcessor.alignToBeats = alignButton.getToggleState(); };
     addAndMakeVisible (alignButton);
@@ -154,12 +195,24 @@ Audio2MidiEditor::Audio2MidiEditor (Audio2MidiProcessor& p)
     addChildComponent (details);
 
     refreshInstrumentButton();
+    themeBox.setSelectedItemIndex (juce::jmax (0, themeNames.indexOf (settings.getValue ("theme"))), juce::dontSendNotification);
+    applyTheme (themeBox.getSelectedItemIndex());
     setSize (640, 620);
     timerCallback();
     startTimerHz (30);
 }
 
-Audio2MidiEditor::~Audio2MidiEditor() = default;
+Audio2MidiEditor::~Audio2MidiEditor() { setLookAndFeel (nullptr); }
+
+void Audio2MidiEditor::applyTheme (int index)
+{
+    const auto graphiteTheme = themeNames[index] == "Graphite";
+    setLookAndFeel (graphiteTheme ? &graphite : nullptr);
+    pianoRoll.pastelNotes = graphiteTheme;
+    // Graphite draws each part as a separate outlined row with a gap below it.
+    partsList.setRowHeight (graphiteTheme ? 33 : 32);
+    repaint();
+}
 
 void Audio2MidiEditor::paint (juce::Graphics& g)
 {
@@ -172,11 +225,12 @@ void Audio2MidiEditor::paint (juce::Graphics& g)
     g.drawText ("Audio2MIDI", titleArea, juce::Justification::centredLeft);
 
     const auto zone = dropZone.toFloat().reduced (1.0f);
+    const auto radius = isGraphite() ? 12.0f : 8.0f;
     g.setColour (text.withAlpha (dragOver ? 0.12f : 0.04f));
-    g.fillRoundedRectangle (zone, 8.0f);
+    g.fillRoundedRectangle (zone, radius);
 
     juce::Path border, dashed;
-    border.addRoundedRectangle (zone, 8.0f);
+    border.addRoundedRectangle (zone, radius);
     const float dashes[] = { 6.0f, 4.0f };
     juce::PathStrokeType (1.0f).createDashedStroke (dashed, border, dashes, 2);
     g.setColour (text.withAlpha (dragOver ? 0.9f : 0.35f));
@@ -207,6 +261,7 @@ void Audio2MidiEditor::resized()
 {
     auto area = getLocalBounds().reduced (16);
     titleArea = area.removeFromTop (28);
+    themeBox.setBounds (titleArea.removeFromRight (116).withSizeKeepingCentre (116, 26));
     area.removeFromTop (8);
     dropZone = area.removeFromTop (72);
     area.removeFromTop (12);
@@ -280,6 +335,22 @@ void Audio2MidiEditor::paintListBoxItem (int row, juce::Graphics& g, int width, 
 
     const auto& part = status.parts[(size_t) row];
     const auto text = getLookAndFeel().findColour (juce::Label::textColourId);
+
+    if (isGraphite())
+    {
+        const auto card = juce::Rectangle<float> ((float) width, (float) height - 4.0f).reduced (0.5f);
+        g.setColour (juce::Colour (0xff2b2b2b).withAlpha (selected ? 1.0f : 0.0f));
+        g.fillRoundedRectangle (card, 8.0f);
+        g.setColour (findColour (juce::ComboBox::outlineColourId).withAlpha (selected ? 0.0f : 1.0f));
+        g.drawRoundedRectangle (card, 8.0f, 1.0f);
+
+        juce::AttributedString label;
+        label.append (part.name + " ", juce::FontOptions (14.0f), text);
+        label.append ("(" + juce::String (part.notes) + " notes)", juce::FontOptions (12.0f), text.withAlpha (0.5f));
+        label.setJustification (juce::Justification::centredLeft);
+        label.draw (g, card.reduced (14.0f, 0.0f));
+        return;
+    }
 
     if (selected)
         g.fillAll (getLookAndFeel().findColour (juce::TextEditor::highlightColourId));

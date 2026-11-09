@@ -36,7 +36,8 @@ set(CORE_DEFINITIONS JUCE_WEB_BROWSER=0 JUCE_VST3_CAN_REPLACE_VST2=0)
 
 # The test runner compiles the same Transcription.cpp, so both exercise one engine implementation.
 target_sources(Audio2Midi PRIVATE src/PluginProcessor.cpp src/PluginEditor.cpp src/Transcription.cpp)
-target_compile_definitions(Audio2Midi PUBLIC ${CORE_DEFINITIONS})
+# AU hosting loads Apple's built-in General MIDI synth for the preview.
+target_compile_definitions(Audio2Midi PUBLIC ${CORE_DEFINITIONS} JUCE_PLUGINHOST_AU=1 JUCE_USE_MP3AUDIOFORMAT=1)
 target_link_libraries(Audio2Midi
     PRIVATE juce::juce_audio_utils
     PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_lto_flags juce::juce_recommended_warning_flags)

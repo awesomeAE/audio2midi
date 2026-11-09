@@ -132,6 +132,43 @@ juce::Result writeParts (const juce::MemoryBlock& midi, const juce::File& dir, c
     return juce::Result::ok();
 }
 
+Status finishedStatus (const juce::MemoryBlock& midi, const juce::MemoryBlock& alignedMidi, const juce::String& alignError,
+                       const juce::File& dir, const juce::String& baseName)
+{
+    Status done;
+    done.stage = Status::Stage::done;
+    done.progress = 1.0;
+    done.midi = midi;
+    done.alignedMidi = alignedMidi;
+    done.alignError = alignError;
+
+    if (const auto written = writeParts (midi, dir, baseName, done.parts); written.failed())
+    {
+        done.stage = Status::Stage::failed;
+        done.message = written.getErrorMessage();
+        done.parts.clear();
+        return done;
+    }
+
+    if (done.parts.empty())
+    {
+        done.message = "No notes found.";
+        return done;
+    }
+
+    done.notes = done.parts.front().notes;
+    done.message = juce::String (done.notes) + " notes in " + juce::String (done.parts.size() - 1) + (done.parts.size() == 2 ? " part" : " parts");
+
+    if (! alignedMidi.isEmpty())
+        if (const auto written = writeParts (alignedMidi, dir.getChildFile ("Aligned"), baseName, done.alignedParts); written.failed())
+        {
+            done.alignError = written.getErrorMessage();
+            done.alignedParts.clear();
+        }
+
+    return done;
+}
+
 juce::String alignRequest (const std::vector<Note>& notes, const juce::var& beatGrid)
 {
     juce::Array<juce::var> list;
@@ -418,34 +455,16 @@ void TranscriptionJob::run()
         return;
     }
 
-    Status done;
-    done.stage = Status::Stage::done;
-    done.message = "No notes found.";
-    done.progress = 1.0;
-    done.midi = *state.midi;
-    const auto baseName = audio.getFileNameWithoutExtension();
-
-    if (const auto written = writeParts (done.midi, outputDir, baseName, done.parts); written.failed())
-        return publish (Status::Stage::failed, written.getErrorMessage(), 0.0);
-
-    if (done.parts.empty())
-        return publish (std::move (done));
-
-    done.notes = done.parts.front().notes;
-    done.message = juce::String (done.notes) + " notes in " + juce::String (done.parts.size() - 1) + (done.parts.size() == 2 ? " part" : " parts");
+    juce::MemoryBlock aligned;
+    juce::String alignError;
 
     if (! state.beatGrid.isObject())
-        done.alignError = "No beat was found in this audio.";
-    else if (const auto aligned = align (state, done.alignedMidi); aligned.failed())
-        done.alignError = aligned.getErrorMessage();
-    else if (const auto written = writeParts (done.alignedMidi, outputDir.getChildFile ("Aligned"), baseName, done.alignedParts); written.failed())
-    {
-        done.alignError = written.getErrorMessage();
-        done.alignedParts.clear();
-    }
+        alignError = "No beat was found in this audio.";
+    else if (const auto result = align (state, aligned); result.failed())
+        alignError = result.getErrorMessage();
 
     if (! threadShouldExit())
-        publish (std::move (done));
+        publish (finishedStatus (*state.midi, aligned, alignError, outputDir, audio.getFileNameWithoutExtension()));
 }
 
 juce::Result TranscriptionJob::transcribe (StreamState& state)

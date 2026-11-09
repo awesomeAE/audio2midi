@@ -23,10 +23,92 @@ bool isBusy (const a2m::Status& status)
 }
 } // namespace
 
+PianoRoll::PianoRoll (Audio2MidiProcessor& p) : processor (p)
+{
+    setTitle ("Notes");
+    setDescription ("Left and right arrow keys move the playhead by 5 seconds.");
+    setWantsKeyboardFocus (true);
+}
+
+void PianoRoll::paint (juce::Graphics& g)
+{
+    const auto text = getLookAndFeel().findColour (juce::Label::textColourId);
+    const auto bounds = getLocalBounds().toFloat();
+    g.setColour (text.withAlpha (0.05f));
+    g.fillRoundedRectangle (bounds, 6.0f);
+
+    const auto& sequence = processor.getPreviewSequence();
+    const auto length = processor.getPreviewLength();
+    int low = 127, high = 0;
+
+    for (const auto* event : sequence)
+        if (event->message.isNoteOn())
+        {
+            low = juce::jmin (low, event->message.getNoteNumber());
+            high = juce::jmax (high, event->message.getNoteNumber());
+        }
+
+    if (length <= 0.0 || low > high)
+    {
+        g.setColour (text.withAlpha (0.4f));
+        g.setFont (juce::FontOptions (13.0f));
+        g.drawText ("No notes to show", getLocalBounds(), juce::Justification::centred);
+    }
+    else
+    {
+        const auto area = bounds.reduced (0.0f, 4.0f);
+        const auto rowHeight = area.getHeight() / (float) (high - low + 1);
+        const auto secondsToX = [&] (double seconds) { return area.getX() + (float) (seconds / length) * area.getWidth(); };
+
+        for (const auto* event : sequence)
+        {
+            const auto& note = event->message;
+
+            if (! note.isNoteOn())
+                continue;
+
+            const auto start = note.getTimeStamp();
+            const auto end = event->noteOffObject != nullptr ? event->noteOffObject->message.getTimeStamp() : start + 0.1;
+            const auto x = secondsToX (start);
+            // One colour per MIDI channel, which the engine assigns per instrument.
+            g.setColour (juce::Colour::fromHSV (std::fmod (0.58f + 0.17f * (float) note.getChannel(), 1.0f), 0.55f, 0.9f, 0.9f));
+            g.fillRect (x, area.getY() + rowHeight * (float) (high - note.getNoteNumber()),
+                        juce::jmax (1.5f, secondsToX (end) - x), juce::jmax (1.0f, rowHeight - 0.5f));
+        }
+    }
+
+    if (length > 0.0)
+    {
+        g.setColour (text);
+        g.fillRect ((float) (processor.getPreviewPosition() / length) * bounds.getWidth(), 0.0f, 1.5f, bounds.getHeight());
+    }
+}
+
+void PianoRoll::mouseDown (const juce::MouseEvent& e) { seekTo ((float) e.x); }
+void PianoRoll::mouseDrag (const juce::MouseEvent& e) { seekTo ((float) e.x); }
+
+bool PianoRoll::keyPressed (const juce::KeyPress& key)
+{
+    const auto step = key == juce::KeyPress::leftKey ? -5.0 : key == juce::KeyPress::rightKey ? 5.0 : 0.0;
+
+    if (step == 0.0)
+        return false;
+
+    processor.seekPreview (processor.getPreviewPosition() + step);
+    repaint();
+    return true;
+}
+
+void PianoRoll::seekTo (float x)
+{
+    processor.seekPreview (juce::jlimit (0.0f, 1.0f, x / (float) getWidth()) * processor.getPreviewLength());
+    repaint();
+}
+
 Audio2MidiEditor::Audio2MidiEditor (Audio2MidiProcessor& p)
     : AudioProcessorEditor (p), audioProcessor (p)
 {
-    for (auto* button : { &chooseButton, &recordButton, &instrumentsButton, &transcribeButton, &revealButton })
+    for (auto* button : { &chooseButton, &recordButton, &instrumentsButton, &transcribeButton, &revealButton, &playButton })
         addAndMakeVisible (button);
 
     chooseButton.onClick = [this] { chooseFile(); };
@@ -38,6 +120,19 @@ Audio2MidiEditor::Audio2MidiEditor (Audio2MidiProcessor& p)
         if (! status.parts.empty())
             status.parts.front().file.revealToUser();
     };
+    playButton.onClick = [this] { audioProcessor.isPreviewing() ? audioProcessor.stopPreview() : audioProcessor.startPreview(); };
+
+    alignButton.setToggleState (audioProcessor.alignToBeats, juce::dontSendNotification);
+    alignButton.onClick = [this] { audioProcessor.alignToBeats = alignButton.getToggleState(); };
+    addAndMakeVisible (alignButton);
+
+    mixSlider.setTitle ("Audio and MIDI mix");
+    mixSlider.setRange (0.0, 1.0);
+    mixSlider.setValue (audioProcessor.previewMix, juce::dontSendNotification);
+    mixSlider.onValueChange = [this] { audioProcessor.previewMix = (float) mixSlider.getValue(); };
+    addAndMakeVisible (mixSlider);
+    addAndMakeVisible (positionLabel);
+    addAndMakeVisible (pianoRoll);
 
     addChildComponent (progressBar);
     addAndMakeVisible (statusLabel);
@@ -51,9 +146,9 @@ Audio2MidiEditor::Audio2MidiEditor (Audio2MidiProcessor& p)
     addChildComponent (details);
 
     refreshInstrumentButton();
-    setSize (560, 460);
+    setSize (640, 620);
     timerCallback();
-    startTimerHz (15);
+    startTimerHz (30);
 }
 
 Audio2MidiEditor::~Audio2MidiEditor() = default;
@@ -80,7 +175,9 @@ void Audio2MidiEditor::paint (juce::Graphics& g)
     g.fillPath (dashed);
 
     const auto source = audioProcessor.getSource();
-    const auto line = audioProcessor.isRecording() ? "Recording  " + formatDuration (audioProcessor.recordedSeconds())
+    const auto recording = (audioProcessor.isRecordingPaused() ? "Recording paused until playback starts  " : "Recording  ")
+                         + formatDuration (audioProcessor.recordedSeconds());
+    const auto line = audioProcessor.isRecording() ? recording
                     : source.existsAsFile()   ? source.getFileName()
                                               : juce::String ("Drop an audio file");
     g.setColour (text);
@@ -92,6 +189,10 @@ void Audio2MidiEditor::paint (juce::Graphics& g)
     g.setColour (text.withAlpha (0.6f));
     g.setFont (juce::FontOptions (13.0f));
     g.drawText ("Drag into your DAW", partsHeader.withTrimmedLeft (48), juce::Justification::centredLeft);
+
+    g.setColour (text.withAlpha (mixSlider.isEnabled() ? 0.8f : 0.4f));
+    g.drawText ("Audio", mixArea.withWidth (44), juce::Justification::centredRight);
+    g.drawText ("MIDI", mixArea.withTrimmedLeft (mixArea.getWidth() - 40), juce::Justification::centredLeft);
 }
 
 void Audio2MidiEditor::resized()
@@ -99,7 +200,7 @@ void Audio2MidiEditor::resized()
     auto area = getLocalBounds().reduced (16);
     titleArea = area.removeFromTop (28);
     area.removeFromTop (8);
-    dropZone = area.removeFromTop (96);
+    dropZone = area.removeFromTop (72);
     area.removeFromTop (12);
 
     auto controls = area.removeFromTop (28);
@@ -114,6 +215,19 @@ void Audio2MidiEditor::resized()
     auto statusRow = area.removeFromTop (22);
     progressBar.setBounds (statusRow.removeFromRight (180));
     statusLabel.setBounds (statusRow);
+
+    area.removeFromTop (12);
+    auto previewRow = area.removeFromTop (28);
+    playButton.setBounds (previewRow.removeFromLeft (72));
+    previewRow.removeFromLeft (8);
+    positionLabel.setBounds (previewRow.removeFromLeft (96));
+    alignButton.setBounds (previewRow.removeFromRight (128));
+    previewRow.removeFromRight (12);
+    mixArea = previewRow;
+    mixSlider.setBounds (previewRow.reduced (48, 0));
+
+    area.removeFromTop (8);
+    pianoRoll.setBounds (area.removeFromTop (150));
 
     area.removeFromTop (8);
     partsHeader = area.removeFromTop (28);
@@ -147,19 +261,6 @@ void Audio2MidiEditor::filesDropped (const juce::StringArray& files, int, int)
     repaint();
 }
 
-bool Audio2MidiEditor::shouldDropFilesWhenDraggedExternally (const juce::DragAndDropTarget::SourceDetails& dragged,
-                                                             juce::StringArray& files, bool& canMoveFiles)
-{
-    const auto row = static_cast<int> (dragged.description);
-
-    if (! juce::isPositiveAndBelow (row, (int) status.parts.size()))
-        return false;
-
-    files.add (status.parts[(size_t) row].file.getFullPathName());
-    canMoveFiles = false;
-    return true;
-}
-
 int Audio2MidiEditor::getNumRows() { return (int) status.parts.size(); }
 
 void Audio2MidiEditor::paintListBoxItem (int row, juce::Graphics& g, int width, int height, bool selected)
@@ -190,9 +291,26 @@ juce::String Audio2MidiEditor::getNameForRow (int row)
     return part.name + ", " + juce::String (part.notes) + " notes";
 }
 
+void Audio2MidiEditor::selectedRowsChanged (int) { previewSelectedPart(); }
+
 juce::var Audio2MidiEditor::getDragSourceDescription (const juce::SparseSet<int>& rows)
 {
-    return rows.isEmpty() ? juce::var() : juce::var (rows[0]);
+    // Start the system file drag as soon as the row is dragged, the way a file dragged out of
+    // Finder arrives, instead of turning an internal drag into one at the window's edge.
+    // Returning no description keeps the list from starting an internal drag as well.
+    if (draggingPart || rows.isEmpty() || ! juce::isPositiveAndBelow (rows[0], (int) status.parts.size()))
+        return {};
+
+    draggingPart = juce::DragAndDropContainer::performExternalDragDropOfFiles ({ status.parts[(size_t) rows[0]].file.getFullPathName() },
+                                                                              false, this, [this] { draggingPart = false; });
+    return {};
+}
+
+void Audio2MidiEditor::previewSelectedPart()
+{
+    const auto row = partsList.getSelectedRow();
+    audioProcessor.setPreviewMidi (juce::isPositiveAndBelow (row, (int) status.parts.size()) ? status.parts[(size_t) row].file : juce::File());
+    pianoRoll.repaint();
 }
 
 void Audio2MidiEditor::timerCallback()
@@ -201,6 +319,11 @@ void Audio2MidiEditor::timerCallback()
     const auto busy = isBusy (status);
     const auto recording = audioProcessor.isRecording();
     const auto failed = status.stage == a2m::Status::Stage::failed;
+    const auto previewing = audioProcessor.isPreviewing();
+    const auto length = audioProcessor.getPreviewLength();
+
+    if (recording && audioProcessor.hasReachedRecordingLimit())
+        notice = audioProcessor.stopRecording();
 
     progress = status.progress;
     progressBar.setVisible (busy);
@@ -212,7 +335,17 @@ void Audio2MidiEditor::timerCallback()
     transcribeButton.setEnabled (busy || (! recording && audioProcessor.getSource().existsAsFile()));
     revealButton.setEnabled (! status.parts.empty());
 
-    const auto message = status.stage == a2m::Status::Stage::idle         ? notice
+    playButton.setButtonText (previewing ? "Stop" : "Play");
+    playButton.setEnabled (previewing || (! recording && length > 0.0));
+    positionLabel.setText (length > 0.0 ? formatDuration (audioProcessor.getPreviewPosition()) + " / " + formatDuration (length) : juce::String(),
+                           juce::dontSendNotification);
+    mixSlider.setEnabled (audioProcessor.canPreviewMidi() && ! status.parts.empty() && audioProcessor.getSource().existsAsFile());
+    alignButton.setEnabled (! status.alignedParts.empty());
+    alignButton.setTooltip (status.alignedParts.empty() && status.alignError.isNotEmpty() ? status.alignError
+                                                                                        : "Moves every note onto the detected beat grid.");
+
+    const auto message = audioProcessor.isPreviewWaitingForHost()     ? juce::String ("Start playback in your DAW to hear the preview.")
+                       : status.stage == a2m::Status::Stage::idle         ? notice
                        : status.stage == a2m::Status::Stage::transcribing ? "Transcribing, " + juce::String (status.notes) + " notes"
                        : failed                                           ? juce::String ("Transcription failed")
                                                                           : status.message;
@@ -226,7 +359,19 @@ void Audio2MidiEditor::timerCallback()
 
     if (previous.parts.size() != status.parts.size()
         || (! status.parts.empty() && previous.parts.front().file != status.parts.front().file))
+    {
         partsList.updateContent();
+
+        if (status.parts.empty())
+            partsList.deselectAllRows();
+        else
+            partsList.selectRow (juce::jlimit (0, (int) status.parts.size() - 1, partsList.getSelectedRow()));
+
+        previewSelectedPart();
+    }
+
+    if (previewing || previous.stage != status.stage)
+        pianoRoll.repaint();
 
     if (recording)
         repaint (dropZone);
@@ -252,7 +397,7 @@ void Audio2MidiEditor::toggleRecording()
     notice.clear();
 
     if (audioProcessor.isRecording())
-        audioProcessor.stopRecording();
+        notice = audioProcessor.stopRecording();
     else if (! audioProcessor.startRecording())
         notice = "Recording needs an audio input and a running audio engine.";
 

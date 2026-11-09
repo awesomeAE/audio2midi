@@ -58,6 +58,10 @@ std::vector<PartData> splitParts (const juce::MemoryBlock& midi);
 /** Writes splitParts (midi) into `dir` as "<baseName> - <part>.mid", appending one Part per file. */
 juce::Result writeParts (const juce::MemoryBlock& midi, const juce::File& dir, const juce::String& baseName, std::vector<Part>& parts);
 
+/** A finished transcription: `midi` (and `alignedMidi`, when not empty) written as part files under `dir`. */
+Status finishedStatus (const juce::MemoryBlock& midi, const juce::MemoryBlock& alignedMidi, const juce::String& alignError,
+                       const juce::File& dir, const juce::String& baseName);
+
 /** The JSON body for POST /export that rewrites `notes` with every onset and release snapped to `beatGrid`. */
 juce::String alignRequest (const std::vector<Note>& notes, const juce::var& beatGrid);
 

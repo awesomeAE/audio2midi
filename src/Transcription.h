@@ -20,6 +20,14 @@ struct Part
     juce::File file;
 };
 
+/** A note as the /transcribe stream reports it, before the MIDI file moves it by the onset delay. */
+struct Note
+{
+    juce::String instrument;
+    int pitch = 0;
+    double start = 0.0, end = -1.0; // end stays negative until the stream closes the note
+};
+
 struct Status
 {
     enum class Stage { idle, startingEngine, transcribing, done, failed };
@@ -28,7 +36,10 @@ struct Status
     juce::String message;
     double progress = 0.0; // 0..1 while transcribing, -1 while the engine starts
     int notes = 0;
-    std::vector<Part> parts; // when done: all parts first, then one per instrument
+    std::vector<Part> parts;        // when done: all parts first, then one per instrument
+    std::vector<Part> alignedParts; // the same, snapped to the beat grid; empty when that failed
+    juce::String alignError;        // why alignedParts is empty
+    juce::MemoryBlock midi, alignedMidi; // what the parts were split from
 };
 
 /** One MIDI file per part, as written by splitParts(). */
@@ -44,13 +55,20 @@ struct PartData
     keeps the conductor track so it lands on the DAW's grid. Empty when no notes were found. */
 std::vector<PartData> splitParts (const juce::MemoryBlock& midi);
 
+/** Writes splitParts (midi) into `dir` as "<baseName> - <part>.mid", appending one Part per file. */
+juce::Result writeParts (const juce::MemoryBlock& midi, const juce::File& dir, const juce::String& baseName, std::vector<Part>& parts);
+
+/** The JSON body for POST /export that rewrites `notes` with every onset and release snapped to `beatGrid`. */
+juce::String alignRequest (const std::vector<Note>& notes, const juce::var& beatGrid);
+
 /** What the /transcribe event stream has delivered so far. */
 struct StreamState
 {
-    int notes = 0;
+    std::vector<Note> notes; // indexed by the stream's note index
     int completedChunks = 0;
     int totalChunks = 0;
     std::optional<juce::MemoryBlock> midi; // set by the final "transcription_complete" event
+    juce::var beatGrid;                     // set with it; void when no beat was found
 };
 
 /** Applies one line of the server-sent event stream. Lines other than "data: {...}" are ignored. */
@@ -100,8 +118,9 @@ public:
 
 private:
     juce::Result transcribe (StreamState&);
-    juce::Result writeParts (const juce::MemoryBlock& midi, std::vector<Part>& parts) const;
-    void publish (Status::Stage, const juce::String& message, double progress, int notes = 0, std::vector<Part> parts = {});
+    juce::Result align (const StreamState&, juce::MemoryBlock& aligned);
+    void publish (Status);
+    void publish (Status::Stage, const juce::String& message, double progress, int notes = 0);
 
     Engine& engine;
     const juce::File audio;

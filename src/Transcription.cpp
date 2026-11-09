@@ -110,6 +110,55 @@ std::vector<PartData> splitParts (const juce::MemoryBlock& midi)
     return parts;
 }
 
+juce::Result writeParts (const juce::MemoryBlock& midi, const juce::File& dir, const juce::String& baseName, std::vector<Part>& parts)
+{
+    if (! dir.createDirectory())
+        return fail ("Could not create " + dir.getFullPathName());
+
+    // A leading "~" would make JUCE treat the name as a home-relative path; a short base keeps
+    // createLegalFileName from truncating part names into each other.
+    const auto base = baseName.trimCharactersAtStart ("~.").substring (0, 60);
+
+    for (const auto& part : splitParts (midi))
+    {
+        const auto file = dir.getNonexistentChildFile (juce::File::createLegalFileName (base + " - " + part.name), ".mid", false);
+
+        if (! file.replaceWithData (part.midi.getData(), part.midi.getSize()))
+            return fail ("Could not write " + file.getFullPathName());
+
+        parts.push_back ({ part.name, part.notes, file });
+    }
+
+    return juce::Result::ok();
+}
+
+juce::String alignRequest (const std::vector<Note>& notes, const juce::var& beatGrid)
+{
+    juce::Array<juce::var> list;
+
+    for (const auto& note : notes)
+    {
+        if (note.end < note.start)
+            continue;
+
+        auto* item = new juce::DynamicObject();
+        item->setProperty ("instrument", note.instrument);
+        item->setProperty ("pitch", note.pitch);
+        item->setProperty ("start", note.start);
+        item->setProperty ("end", note.end);
+        list.add (juce::var (item));
+    }
+
+    auto* options = new juce::DynamicObject();
+    options->setProperty ("quantize", true);
+
+    auto* request = new juce::DynamicObject();
+    request->setProperty ("notes", list);
+    request->setProperty ("beat_grid", beatGrid);
+    request->setProperty ("options", juce::var (options));
+    return juce::JSON::toString (juce::var (request), true);
+}
+
 void handleStreamLine (const juce::String& line, StreamState& state)
 {
     if (! line.startsWith ("data:"))
@@ -120,7 +169,14 @@ void handleStreamLine (const juce::String& line, StreamState& state)
 
     if (type == "start")
     {
-        ++state.notes;
+        // The engine numbers notes from 0 in stream order.
+        if (static_cast<int> (event["index"]) == (int) state.notes.size())
+            state.notes.push_back ({ event["instrument"].toString(), static_cast<int> (event["pitch"]), static_cast<double> (event["start_time"]) });
+    }
+    else if (type == "end")
+    {
+        if (const auto index = static_cast<int> (event["start_event_index"]); juce::isPositiveAndBelow (index, (int) state.notes.size()))
+            state.notes[(size_t) index].end = static_cast<double> (event["end_time"]);
     }
     else if (type == "progress")
     {
@@ -133,6 +189,9 @@ void handleStreamLine (const juce::String& line, StreamState& state)
 
         if (juce::Base64::convertFromBase64 (decoded, event["data"].toString()))
             state.midi = decoded.getMemoryBlock();
+
+        if (event["beat_grid"].isObject())
+            state.beatGrid = event["beat_grid"];
     }
 }
 
@@ -249,7 +308,21 @@ juce::Result Engine::launch (juce::Thread& caller, const std::function<void (con
     server = std::make_unique<juce::ChildProcess>();
 
     // -I: never import modules from the host's working directory or PYTHON* variables.
-    if (! server->start (juce::StringArray { python.getFullPathName(), "-I", "-X", "utf8", "-m", "muscriptor", "serve",
+    // The watcher exits the server once its parent (this host) is gone, so a crashed DAW
+    // doesn't leave it running. shortcut: getppid() never changes on Windows, so the server
+    // outlives a crashed host there; watch the host's process handle if Windows gets tested.
+    const auto watchedServe = "import os, sys, threading, time\n"
+                              "host = os.getppid()\n"
+                              "def watch():\n"
+                              "    while os.getppid() == host:\n"
+                              "        time.sleep(1)\n"
+                              "    os._exit(0)\n"
+                              "threading.Thread(target=watch, daemon=True).start()\n"
+                              "sys.argv[0] = 'muscriptor'\n"
+                              "from muscriptor.main import main\n"
+                              "main()\n";
+
+    if (! server->start (juce::StringArray { python.getFullPathName(), "-I", "-X", "utf8", "-c", watchedServe, "serve",
                                              "--host", "127.0.0.1", "--port", juce::String (enginePort) }))
     {
         server.reset();
@@ -340,22 +413,39 @@ void TranscriptionJob::run()
     if (const auto result = transcribe (state); result.failed())
     {
         if (! threadShouldExit())
-            publish (Status::Stage::failed, result.getErrorMessage(), 0.0, state.notes);
+            publish (Status::Stage::failed, result.getErrorMessage(), 0.0, (int) state.notes.size());
 
         return;
     }
 
-    std::vector<Part> parts;
+    Status done;
+    done.stage = Status::Stage::done;
+    done.message = "No notes found.";
+    done.progress = 1.0;
+    done.midi = *state.midi;
+    const auto baseName = audio.getFileNameWithoutExtension();
 
-    if (const auto written = writeParts (*state.midi, parts); written.failed())
+    if (const auto written = writeParts (done.midi, outputDir, baseName, done.parts); written.failed())
         return publish (Status::Stage::failed, written.getErrorMessage(), 0.0);
 
-    if (parts.empty())
-        return publish (Status::Stage::done, "No notes found.", 1.0);
+    if (done.parts.empty())
+        return publish (std::move (done));
 
-    const auto total = parts.front().notes;
-    const auto summary = juce::String (total) + " notes in " + juce::String (parts.size() - 1) + (parts.size() == 2 ? " part" : " parts");
-    publish (Status::Stage::done, summary, 1.0, total, std::move (parts));
+    done.notes = done.parts.front().notes;
+    done.message = juce::String (done.notes) + " notes in " + juce::String (done.parts.size() - 1) + (done.parts.size() == 2 ? " part" : " parts");
+
+    if (! state.beatGrid.isObject())
+        done.alignError = "No beat was found in this audio.";
+    else if (const auto aligned = align (state, done.alignedMidi); aligned.failed())
+        done.alignError = aligned.getErrorMessage();
+    else if (const auto written = writeParts (done.alignedMidi, outputDir.getChildFile ("Aligned"), baseName, done.alignedParts); written.failed())
+    {
+        done.alignError = written.getErrorMessage();
+        done.alignedParts.clear();
+    }
+
+    if (! threadShouldExit())
+        publish (std::move (done));
 }
 
 juce::Result TranscriptionJob::transcribe (StreamState& state)
@@ -403,12 +493,12 @@ juce::Result TranscriptionJob::transcribe (StreamState& state)
     {
         handleStreamLine (stream.readNextLine(), state);
 
-        if (state.notes != reportedNotes || state.completedChunks != reportedChunks)
+        if ((int) state.notes.size() != reportedNotes || state.completedChunks != reportedChunks)
         {
-            reportedNotes = state.notes;
+            reportedNotes = (int) state.notes.size();
             reportedChunks = state.completedChunks;
             const auto progress = state.totalChunks > 0 ? (double) state.completedChunks / state.totalChunks : 0.0;
-            publish (Status::Stage::transcribing, "Transcribing", progress, state.notes);
+            publish (Status::Stage::transcribing, "Transcribing", progress, reportedNotes);
         }
     }
 
@@ -421,30 +511,39 @@ juce::Result TranscriptionJob::transcribe (StreamState& state)
     return juce::Result::ok();
 }
 
-juce::Result TranscriptionJob::writeParts (const juce::MemoryBlock& midi, std::vector<Part>& parts) const
+juce::Result TranscriptionJob::align (const StreamState& state, juce::MemoryBlock& aligned)
 {
-    if (! outputDir.createDirectory())
-        return fail ("Could not create " + outputDir.getFullPathName());
+    int status = 0;
+    const auto stream = Engine::url ("/export")
+                            .withPOSTData (alignRequest (state.notes, state.beatGrid))
+                            .createInputStream (juce::URL::InputStreamOptions (juce::URL::ParameterHandling::inPostData)
+                                                    .withExtraHeaders ("Content-Type: application/json")
+                                                    .withConnectionTimeoutMs (60 * 1000)
+                                                    .withStatusCode (&status));
+    if (stream == nullptr)
+        return fail ("Could not reach the transcription engine to align the notes.");
 
-    // A leading "~" would make JUCE treat the name as a home-relative path; a short base keeps
-    // createLegalFileName from truncating part names into each other.
-    const auto base = audio.getFileNameWithoutExtension().trimCharactersAtStart ("~.").substring (0, 60);
+    stream->readIntoMemoryBlock (aligned);
 
-    for (const auto& part : splitParts (midi))
+    if (status != 200)
     {
-        const auto file = outputDir.getNonexistentChildFile (juce::File::createLegalFileName (base + " - " + part.name), ".mid", false);
-
-        if (! file.replaceWithData (part.midi.getData(), part.midi.getSize()))
-            return fail ("Could not write " + file.getFullPathName());
-
-        parts.push_back ({ part.name, part.notes, file });
+        const auto body = aligned.toString().substring (0, 300);
+        aligned.reset();
+        return fail ("Aligning the notes failed (HTTP " + juce::String (status) + "): " + body);
     }
 
     return juce::Result::ok();
 }
 
-void TranscriptionJob::publish (Status::Stage stage, const juce::String& message, double progress, int notes, std::vector<Part> parts)
+void TranscriptionJob::publish (Status status) { onUpdate (status); }
+
+void TranscriptionJob::publish (Status::Stage stage, const juce::String& message, double progress, int notes)
 {
-    onUpdate ({ stage, message, progress, notes, std::move (parts) });
+    Status status;
+    status.stage = stage;
+    status.message = message;
+    status.progress = progress;
+    status.notes = notes;
+    publish (std::move (status));
 }
 } // namespace a2m

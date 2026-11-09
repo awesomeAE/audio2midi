@@ -122,13 +122,28 @@ struct StreamTest final : juce::UnitTest
         a2m::handleStreamLine (R"(data: {"type": "start", "pitch": 30, "start_time": 0.2, "index": 1, "instrument": "electric_bass"})", state);
         expectEquals (state.completedChunks, 1);
         expectEquals (state.totalChunks, 3);
-        expectEquals (state.notes, 2);
+        expectEquals ((int) state.notes.size(), 2);
+        expectEquals (state.notes[0].instrument, juce::String ("drums"));
+        expectEquals (state.notes[0].end, 0.16);
+        expectEquals (state.notes[1].pitch, 30);
+        expect (state.notes[1].end < 0.0);
         expect (! state.midi.has_value());
 
         const auto midi = engineStyleMidi();
         a2m::handleStreamLine ("data: {\"type\": \"transcription_complete\", \"data\": \"" + juce::Base64::toBase64 (midi.getData(), midi.getSize())
-                               + "\", \"beat_grid\": null}", state);
+                               + "\", \"beat_grid\": {\"bpm\": 120.0, \"beats\": [0.5, 1.0]}}", state);
         expect (state.midi.has_value() && *state.midi == midi);
+        expectEquals (static_cast<double> (state.beatGrid["bpm"]), 120.0);
+
+        beginTest ("the align request carries the closed notes and the grid as streamed");
+        const auto request = juce::JSON::parse (a2m::alignRequest (state.notes, state.beatGrid));
+        const auto* notes = request["notes"].getArray();
+        expect (notes != nullptr && notes->size() == 1);
+        expectEquals ((*notes)[0]["instrument"].toString(), juce::String ("drums"));
+        expectEquals (static_cast<double> ((*notes)[0]["start"]), 0.15);
+        expectEquals (static_cast<double> ((*notes)[0]["end"]), 0.16);
+        expectEquals (request["beat_grid"]["beats"].size(), 2);
+        expect (static_cast<bool> (request["options"]["quantize"]));
 
         beginTest ("blank lines, comments and junk are ignored");
         a2m::StreamState untouched;
@@ -136,7 +151,8 @@ struct StreamTest final : juce::UnitTest
         for (const auto* line : { "", ": keep-alive", "event: ping", "data: not json", "data: {\"type\": \"unknown\"}" })
             a2m::handleStreamLine (line, untouched);
 
-        expectEquals (untouched.notes, 0);
+        expect (untouched.notes.empty());
+        expect (untouched.beatGrid.isVoid());
         expectEquals (untouched.totalChunks, 0);
         expect (! untouched.midi.has_value());
     }
@@ -193,6 +209,29 @@ int runEndToEnd (const juce::File& audio, const juce::StringArray& instruments)
         ok = ok && notes == part.notes && notes > 0;
         std::cout << "  " << part.name << ": " << part.notes << " notes -> " << part.file.getFullPathName()
                   << (notes == part.notes ? "" : "  (MISMATCH: file has " + juce::String (notes) + ")") << std::endl;
+    }
+
+    // Aligned onsets must sit on a beat subdivision: a sixteenth or a triplet eighth of the quarter note.
+    if (last.alignedParts.empty())
+        std::cout << "  aligned: none (" << last.alignError << ")" << std::endl;
+
+    for (const auto& part : last.alignedParts)
+    {
+        const auto file = readMidi ([&] { juce::MemoryBlock data; part.file.loadFileAsData (data); return data; }());
+        const auto step = file.getTimeFormat() / 12.0;
+        int onsets = 0, onGrid = 0;
+
+        for (int i = 1; i < file.getNumTracks(); ++i)
+            for (const auto* event : *file.getTrack (i))
+                if (event->message.isNoteOn())
+                {
+                    ++onsets;
+                    const auto ticks = event->message.getTimeStamp() / step;
+                    onGrid += std::abs (ticks - std::round (ticks)) < 0.01 ? 1 : 0;
+                }
+
+        ok = ok && onsets == part.notes && onGrid == onsets;
+        std::cout << "  aligned " << part.name << ": " << onGrid << "/" << onsets << " onsets on the grid" << std::endl;
     }
 
     if (! instruments.isEmpty())

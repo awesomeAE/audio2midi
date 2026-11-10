@@ -17,6 +17,15 @@ const github = (
 );
 const arrow = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 4v13m0 0-5-5m5 5 5-5M5 20h14"/></svg>';
 const url = new URL(home, Astro.site).href;
+// Read at build time: visitors make no request to GitHub, and the count refreshes with each deploy.
+const stars: number | undefined = await fetch("https://api.github.com/repos/awesomeAE/audio2midi")
+  .then((r) => (r.ok ? r.json() : undefined))
+  .then((d) => d?.stargazers_count)
+  .catch(() => undefined);
+const starBadge =
+  typeof stars === "number"
+    ? `<span class="stars"><span aria-hidden="true">★</span> ${new Intl.NumberFormat(t.htmlLang).format(stars)}<span class="sr-only"> ${t.nav.stars}</span></span>`
+    : "";
 
 const jsonLd = {
   "@context": "https://schema.org",
@@ -80,7 +89,7 @@ const clientText = { ...t.studio.labels, hear: t.studio.hear, stop: t.studio.sto
         <p class="lead reveal">{t.hero.lead}</p>
         <div class="cta reveal">
           <a class="btn" href={download}><Fragment set:html={arrow} />{t.hero.download}</a>
-          <a class="btn ghost" href={repo}><Fragment set:html={github} />{t.hero.source}</a>
+          <a class="btn ghost" href={repo}><Fragment set:html={github} />{t.hero.source}<Fragment set:html={starBadge} /></a>
         </div>
         <p class="fine reveal">{t.hero.fine}</p>
       </div>
@@ -279,7 +288,7 @@ const clientText = { ...t.studio.labels, hear: t.studio.hear, stop: t.studio.sto
         <p>{t.final.text}</p>
         <div class="cta">
           <a class="btn light" href={download}><Fragment set:html={arrow} />{t.final.download}</a>
-          <a class="btn ghost-dark" href={repo}><Fragment set:html={github} />{t.final.star}</a>
+          <a class="btn ghost-dark" href={repo}><Fragment set:html={github} />{t.final.star}<Fragment set:html={starBadge} /></a>
         </div>
       </div>
     </section>

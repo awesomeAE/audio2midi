@@ -219,3 +219,19 @@ code,
     transition: none;
   }
 }
+
+.stars {
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: rgb(127 127 160 / 0.16);
+  font: 500 0.85rem var(--font-mono);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

@@ -16,6 +16,7 @@ export default {
     compare: "Vergleich",
     faq: "FAQ",
     github: "Audio2MIDI auf GitHub",
+    stars: "GitHub-Sterne",
     download: "Download",
     language: "Sprache",
   },

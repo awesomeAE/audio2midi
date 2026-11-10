@@ -43,6 +43,10 @@ juce_add_binary_data(Audio2MidiTranslations SOURCES i18n/de.txt i18n/es.txt i18n
 target_link_libraries(Audio2Midi
     PRIVATE Audio2MidiTranslations juce::juce_audio_utils
     PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_lto_flags juce::juce_recommended_warning_flags)
+if(APPLE)
+    # Smaller downloads: drop unreachable code and local symbols at link time, where the linker still signs the result.
+    target_link_options(Audio2Midi PUBLIC $<$<CONFIG:Release>:-Wl,-dead_strip,-x>)
+endif()
 
 juce_add_console_app(Audio2MidiTests PRODUCT_NAME "Audio2MidiTests" NEEDS_CURL TRUE)
 target_sources(Audio2MidiTests PRIVATE tests/Tests.cpp src/Transcription.cpp)

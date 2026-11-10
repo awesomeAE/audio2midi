@@ -15,12 +15,17 @@ public:
     void mouseDrag (const juce::MouseEvent&) override;
     bool keyPressed (const juce::KeyPress&) override;
 
+    /** Moves the drawn playhead to the preview position, repainting only its old and new strip. */
+    void repaintPlayhead();
+
     bool pastelNotes = false;
 
 private:
     void seekTo (float x);
+    juce::Rectangle<float> playheadBounds() const;
 
     Audio2MidiProcessor& processor;
+    double playhead = 0.0; // 0..1 across the roll, as drawn; only repaintPlayhead() moves it
 };
 
 /** Near-black panels, outlined rounded controls and pastel notes. */

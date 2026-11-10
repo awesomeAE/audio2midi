@@ -36,12 +36,14 @@ PianoRoll::PianoRoll (Audio2MidiProcessor& p) : processor (p)
     setTitle (TRANS ("Notes"));
     setDescription (TRANS ("Left and right arrow keys move the playhead by 5 seconds."));
     setWantsKeyboardFocus (true);
+    setOpaque (true); // a moving playhead then never repaints the editor behind it
 }
 
 void PianoRoll::paint (juce::Graphics& g)
 {
     const auto text = getLookAndFeel().findColour (juce::Label::textColourId);
     const auto bounds = getLocalBounds().toFloat();
+    g.fillAll (getLookAndFeel().findColour (juce::ResizableWindow::backgroundColourId));
     g.setColour (text.withAlpha (0.05f));
     g.fillRoundedRectangle (bounds, 6.0f);
 
@@ -78,19 +80,43 @@ void PianoRoll::paint (juce::Graphics& g)
             const auto start = note.getTimeStamp();
             const auto end = event->noteOffObject != nullptr ? event->noteOffObject->message.getTimeStamp() : start + 0.1;
             const auto x = secondsToX (start);
+            const juce::Rectangle<float> rect (x, area.getY() + rowHeight * (float) (high - note.getNoteNumber()),
+                                               juce::jmax (1.5f, secondsToX (end) - x), juce::jmax (1.0f, rowHeight - 0.5f));
+
+            // While playing only the playhead's strip is repainted, which few notes touch.
+            if (! g.clipRegionIntersects (rect.getSmallestIntegerContainer()))
+                continue;
+
             // One colour per MIDI channel, which the engine assigns per instrument.
             g.setColour (juce::Colour::fromHSV (std::fmod (0.58f + 0.17f * (float) note.getChannel(), 1.0f),
                                                 pastelNotes ? 0.38f : 0.55f, pastelNotes ? 0.92f : 0.9f, 0.9f));
-            g.fillRect (x, area.getY() + rowHeight * (float) (high - note.getNoteNumber()),
-                        juce::jmax (1.5f, secondsToX (end) - x), juce::jmax (1.0f, rowHeight - 0.5f));
+            g.fillRect (rect);
         }
     }
 
     if (length > 0.0)
     {
         g.setColour (text);
-        g.fillRect ((float) (processor.getPreviewPosition() / length) * bounds.getWidth(), 0.0f, 1.5f, bounds.getHeight());
+        g.fillRect (playheadBounds());
     }
+}
+
+juce::Rectangle<float> PianoRoll::playheadBounds() const
+{
+    return { (float) playhead * (float) getWidth(), 0.0f, 1.5f, (float) getHeight() };
+}
+
+void PianoRoll::repaintPlayhead()
+{
+    const auto length = processor.getPreviewLength();
+    const auto now = length > 0.0 ? processor.getPreviewPosition() / length : 0.0;
+
+    if (juce::exactlyEqual (now, playhead))
+        return;
+
+    repaint (playheadBounds().getSmallestIntegerContainer());
+    playhead = now;
+    repaint (playheadBounds().getSmallestIntegerContainer());
 }
 
 void PianoRoll::mouseDown (const juce::MouseEvent& e) { seekTo ((float) e.x); }
@@ -104,14 +130,14 @@ bool PianoRoll::keyPressed (const juce::KeyPress& key)
         return false;
 
     processor.seekPreview (processor.getPreviewPosition() + step);
-    repaint();
+    repaintPlayhead();
     return true;
 }
 
 void PianoRoll::seekTo (float x)
 {
     processor.seekPreview (juce::jlimit (0.0f, 1.0f, x / (float) getWidth()) * processor.getPreviewLength());
-    repaint();
+    repaintPlayhead();
 }
 
 GraphiteLookAndFeel::GraphiteLookAndFeel()
@@ -417,6 +443,8 @@ void Audio2MidiEditor::timerCallback()
     if (recording && audioProcessor.hasReachedRecordingLimit())
         notice = audioProcessor.stopRecording();
 
+    const auto hasSource = audioProcessor.getSource().existsAsFile(); // one disk query per tick
+
     progress = status.progress;
     progressBar.setVisible (busy);
     chooseButton.setEnabled (! busy && ! recording);
@@ -431,14 +459,14 @@ void Audio2MidiEditor::timerCallback()
         modelBox.setSelectedItemIndex (shownModel = audioProcessor.model, juce::dontSendNotification);
 
     transcribeButton.setButtonText (busy ? TRANS ("Cancel") : TRANS ("Transcribe"));
-    transcribeButton.setEnabled (busy || (! recording && audioProcessor.getSource().existsAsFile()));
+    transcribeButton.setEnabled (busy || (! recording && hasSource));
     revealButton.setEnabled (! status.parts.empty());
 
     playButton.setButtonText (previewing ? TRANS ("Stop") : TRANS ("Play"));
-    playButton.setEnabled (previewing || (! recording && length > 0.0 && (audioProcessor.canPreviewMidi() || audioProcessor.getSource().existsAsFile())));
+    playButton.setEnabled (previewing || (! recording && length > 0.0 && (audioProcessor.canPreviewMidi() || hasSource)));
     positionLabel.setText (length > 0.0 ? formatDuration (audioProcessor.getPreviewPosition()) + " / " + formatDuration (length) : juce::String(),
                            juce::dontSendNotification);
-    mixSlider.setEnabled (audioProcessor.canPreviewMidi() && ! status.parts.empty() && audioProcessor.getSource().existsAsFile());
+    mixSlider.setEnabled (audioProcessor.canPreviewMidi() && ! status.parts.empty() && hasSource);
     alignButton.setEnabled (! status.alignedParts.empty());
     // The host can restore a state while the editor is open.
     alignButton.setToggleState (audioProcessor.alignToBeats, juce::dontSendNotification);
@@ -474,8 +502,10 @@ void Audio2MidiEditor::timerCallback()
         previewSelectedPart();
     }
 
-    if (previewing || previous.stage != status.stage)
+    if (previous.stage != status.stage)
         pianoRoll.repaint();
+
+    pianoRoll.repaintPlayhead();
 
     if (recording)
         repaint (dropZone);

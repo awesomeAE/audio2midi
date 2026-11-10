@@ -17,14 +17,14 @@ const github = (
 );
 const arrow = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 4v13m0 0-5-5m5 5 5-5M5 20h14"/></svg>';
 const url = new URL(home, Astro.site).href;
-// Read at build time: visitors make no request to GitHub, and the count refreshes with each deploy.
+// Read at build time as a fallback; worker.js swaps in a fresh count when the page is served.
 const stars: number | undefined = await fetch("https://api.github.com/repos/awesomeAE/audio2midi")
   .then((r) => (r.ok ? r.json() : undefined))
   .then((d) => d?.stargazers_count)
   .catch(() => undefined);
 const starBadge =
   typeof stars === "number"
-    ? `<span class="stars"><span aria-hidden="true">★</span> ${new Intl.NumberFormat(t.htmlLang).format(stars)}<span class="sr-only"> ${t.nav.stars}</span></span>`
+    ? `<span class="stars"><span aria-hidden="true">★</span> <span class="stars-n">${new Intl.NumberFormat(t.htmlLang).format(stars)}</span><span class="sr-only"> ${t.nav.stars}</span></span>`
     : "";
 
 const jsonLd = {

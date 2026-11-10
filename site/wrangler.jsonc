@@ -1,7 +1,13 @@
 {
   "name": "awesomeae-site",
   "compatibility_date": "2026-11-09",
-  "assets": { "directory": "./dist", "not_found_handling": "404-page" },
+  "main": "./worker.js",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "404-page",
+    "run_worker_first": ["/", "/de/", "/es/", "/fr/"]
+  },
   "routes": [
     { "pattern": "awesomeae.com", "custom_domain": true },
     { "pattern": "www.awesomeae.com", "custom_domain": true }

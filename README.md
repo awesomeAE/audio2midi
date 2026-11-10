@@ -92,7 +92,7 @@ The MIDI files carry the detected tempo and meter, so they land on the grid. The
 ctest --test-dir build                                    # unit tests and translation table check
 build/Audio2MidiTests_artefacts/Release/Audio2MidiTests --e2e song.mp3 [--model small] [drums electric_bass]
 pluginval --strictness-level 10 --validate ~/Library/Audio/Plug-Ins/VST3/Audio2MIDI.vst3
-packaging/macos/build-pkg.sh build/Audio2Midi_artefacts/Release 0.5.0 Audio2MIDI-macOS.pkg
+packaging/macos/build-pkg.sh build/Audio2Midi_artefacts/Release 1.0.0 Audio2MIDI-macOS.pkg
 ```
 
 `--e2e` runs a real transcription through the same engine code the plugin uses. It starts and stops the engine when none is running.
